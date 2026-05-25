@@ -1,0 +1,51 @@
+# Owner: Amer
+[project]
+name = "week8-concierge"
+version = "0.1.0"
+description = "Multi-tenant AI SaaS concierge platform"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "psycopg2-binary",
+    "fastapi-users[sqlalchemy]",
+    "redis",
+    "rq",
+    "miniopy-async",
+    "hvac",
+    "structlog",
+    "httpx",
+    "pyjwt",
+    "python-multipart",
+    "scikit-learn",
+    "joblib",
+    "onnxruntime",
+    "numpy",
+    "streamlit",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "mypy",
+    "types-redis",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

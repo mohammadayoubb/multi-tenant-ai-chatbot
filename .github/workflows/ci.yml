@@ -1,0 +1,32 @@
+# Owner: Amer
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Ruff check
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest
+
+      - name: Docker build
+        run: docker compose build

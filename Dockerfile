@@ -1,0 +1,23 @@
+# Owner: Amer
+FROM python:3.11-slim AS base
+WORKDIR /app
+RUN pip install --no-cache-dir uv
+COPY pyproject.toml ./
+RUN uv pip install --system -e ".[dev]"
+COPY app ./app
+COPY modelserver ./modelserver
+COPY guardrails ./guardrails
+COPY admin ./admin
+COPY scripts ./scripts
+
+FROM base AS api
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+FROM base AS modelserver
+CMD ["uvicorn", "modelserver.main:app", "--host", "0.0.0.0", "--port", "8010"]
+
+FROM base AS guardrails
+CMD ["uvicorn", "guardrails.main:app", "--host", "0.0.0.0", "--port", "8020"]
+
+FROM base AS admin
+CMD ["streamlit", "run", "admin/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]

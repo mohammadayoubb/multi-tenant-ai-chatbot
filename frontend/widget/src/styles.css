@@ -1,0 +1,24 @@
+// Owner: Amer
+.widget-shell {
+  width: 320px;
+  min-height: 420px;
+  border: 1px solid #ddd;
+  border-radius: 0.6rem;
+  padding: 1rem;
+  font-family: Arial, sans-serif;
+}
+
+input {
+  width: 100%;
+  padding: 0.7rem;
+  border-radius: 0.6rem;
+  border: 1px solid #ccc;
+}
+
+button {
+  margin-top: 0.7rem;
+  padding: 0.7rem 1rem;
+  border-radius: 0.6rem;
+  border: none;
+  cursor: pointer;
+}

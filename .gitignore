@@ -1,0 +1,22 @@
+# Owner: Amer
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+.idea/
+.vscode/
+*.pem
+*.key
+node_modules/
+dist/
+build/
+logs/
+*.log

@@ -1,0 +1,9 @@
+// Owner: Ayoub
+{
+  "task": "visitor intent classification",
+  "classical_model": "tfidf_logistic_regression",
+  "dl_model": "small_dl_exported_to_onnx",
+  "llm_baseline": "zero_shot_api",
+  "shipped_model": "placeholder",
+  "sha256": "placeholder"
+}

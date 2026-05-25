@@ -1,0 +1,115 @@
+# Owner: Amer
+services:
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      vault:
+        condition: service_healthy
+      modelserver:
+        condition: service_started
+      guardrails:
+        condition: service_started
+    networks: [concierge-net]
+
+  admin:
+    build:
+      context: .
+      target: admin
+    ports:
+      - "${ADMIN_PORT:-8501}:8501"
+    env_file: .env
+    depends_on:
+      - api
+    networks: [concierge-net]
+
+  modelserver:
+    build:
+      context: .
+      target: modelserver
+    ports:
+      - "${MODEL_SERVER_PORT:-8010}:8010"
+    env_file: .env
+    networks: [concierge-net]
+
+  guardrails:
+    build:
+      context: .
+      target: guardrails
+    ports:
+      - "${GUARDRAILS_PORT:-8020}:8020"
+    env_file: .env
+    networks: [concierge-net]
+
+  widget:
+    build:
+      context: ./frontend/widget
+    ports:
+      - "${WIDGET_PORT:-5173}:5173"
+    networks: [concierge-net]
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: concierge
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [concierge-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d concierge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks: [concierge-net]
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    networks: [concierge-net]
+
+  vault:
+    image: hashicorp/vault:1.16
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_ROOT_TOKEN:-root}
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK
+    networks: [concierge-net]
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 5s
+      retries: 10
+
+networks:
+  concierge-net:
+
+volumes:
+  postgres_data:
+  minio_data:
