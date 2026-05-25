@@ -1,0 +1,100 @@
+{
+  "dataset": {
+    "name": "UCI SMS Spam Collection",
+    "task": "spam detection",
+    "dataset_copy": "evals/classifier/sms_spam_dataset_used.csv",
+    "dataset_sha256": "eca8704055019c57be593a94c9eef123592da27c3a07c705020f5432144f0476",
+    "train_rows": 4457,
+    "test_rows": 1115,
+    "labels": [
+      "not_spam",
+      "spam"
+    ]
+  },
+  "classical_tfidf_logreg": {
+    "macro_f1": 0.9592144936169769,
+    "classification_report": {
+      "not_spam": {
+        "precision": 0.9886246122026887,
+        "recall": 0.989648033126294,
+        "f1-score": 0.9891360579410243,
+        "support": 966.0
+      },
+      "spam": {
+        "precision": 0.9324324324324325,
+        "recall": 0.9261744966442953,
+        "f1-score": 0.9292929292929293,
+        "support": 149.0
+      },
+      "accuracy": 0.9811659192825112,
+      "macro avg": {
+        "precision": 0.9605285223175606,
+        "recall": 0.9579112648852947,
+        "f1-score": 0.9592144936169769,
+        "support": 1115.0
+      },
+      "weighted avg": {
+        "precision": 0.9811155227087263,
+        "recall": 0.9811659192825112,
+        "f1-score": 0.9811390837988125,
+        "support": 1115.0
+      }
+    },
+    "latency_ms": 1.2523,
+    "train_time_seconds": 0.3841,
+    "predict_time_seconds_on_test": 0.0633,
+    "cost_usd": 0.0,
+    "artifact": "modelserver/artifacts/classical_tfidf_logreg.joblib",
+    "artifact_sha256": "7bbe19b36995dd77d56cf70924229ac9bcbc78e1afaad48b85d3e1bbf9dec34d",
+    "onnx_artifact": "modelserver/artifacts/classical_tfidf_logreg.onnx",
+    "onnx_sha256": "d8f08af6f77391435afdc386f829e2d2a38ed1a5ae8bfc043b5f2262bad2d8f2"
+  },
+  "small_dl_onnx": {
+    "macro_f1": 0.968290081763242,
+    "classification_report": {
+      "not_spam": {
+        "precision": 0.9876796714579056,
+        "recall": 0.9958592132505176,
+        "f1-score": 0.9917525773195877,
+        "support": 966.0
+      },
+      "spam": {
+        "precision": 0.9716312056737588,
+        "recall": 0.9194630872483222,
+        "f1-score": 0.9448275862068966,
+        "support": 149.0
+      },
+      "accuracy": 0.9856502242152466,
+      "macro avg": {
+        "precision": 0.9796554385658323,
+        "recall": 0.9576611502494199,
+        "f1-score": 0.968290081763242,
+        "support": 1115.0
+      },
+      "weighted avg": {
+        "precision": 0.9855350782724008,
+        "recall": 0.9856502242152466,
+        "f1-score": 0.9854818834399545,
+        "support": 1115.0
+      }
+    },
+    "latency_ms": 0.4842,
+    "train_time_seconds": 6.3951,
+    "predict_time_seconds_on_test": 0.0493,
+    "cost_usd": 0.0,
+    "onnx_artifact": "modelserver/artifacts/dl_tfidf_mlp.onnx",
+    "onnx_artifact_sha256": "f4a21455c389582f29c37f4202a63b6a65134ead0bdbb1f01f72b898092ce651",
+    "vectorizer_artifact": "modelserver/artifacts/dl_tfidf_vectorizer.joblib",
+    "vectorizer_sha256": "0e9d5d1233e063129190e3927ef0294fe76f6883a06264b58b2f73ff4830e172",
+    "label_encoder_artifact": "modelserver/artifacts/label_encoder.joblib",
+    "label_encoder_sha256": "07455a3911d862e0639c13ac4b448fc2a044570f4ed2729c8ca24b0fac00df36"
+  },
+  "llm_zero_shot": {
+    "status": "skipped",
+    "reason": "No API key used in this notebook run.",
+    "macro_f1": null,
+    "per_class_f1": null,
+    "latency_ms": null,
+    "estimated_cost_usd": null
+  }
+}

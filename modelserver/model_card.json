@@ -1,9 +1,58 @@
-// Owner: Ayoub
 {
-  "task": "visitor intent classification",
-  "classical_model": "tfidf_logistic_regression",
-  "dl_model": "small_dl_exported_to_onnx",
-  "llm_baseline": "zero_shot_api",
-  "shipped_model": "placeholder",
-  "sha256": "placeholder"
+  "task": "Spam detection for Concierge inbound visitor messages",
+  "owner": "Ayoub / Owner C",
+  "dataset": {
+    "name": "UCI SMS Spam Collection",
+    "source_url": "https://archive.ics.uci.edu/ml/machine-learning-databases/00228/smsspamcollection.zip",
+    "dataset_sha256": "eca8704055019c57be593a94c9eef123592da27c3a07c705020f5432144f0476",
+    "train_rows": 4457,
+    "test_rows": 1115,
+    "split": "80/20 stratified split with random_state=42"
+  },
+  "labels": [
+    "not_spam",
+    "spam"
+  ],
+  "models_compared": {
+    "classical_tfidf_logreg": {
+      "macro_f1": 0.9592144936169769,
+      "latency_ms": 1.2523,
+      "cost_usd": 0.0,
+      "artifact": "modelserver/artifacts/classical_tfidf_logreg.joblib",
+      "artifact_sha256": "7bbe19b36995dd77d56cf70924229ac9bcbc78e1afaad48b85d3e1bbf9dec34d",
+      "onnx_artifact": "modelserver/artifacts/classical_tfidf_logreg.onnx",
+      "onnx_sha256": "d8f08af6f77391435afdc386f829e2d2a38ed1a5ae8bfc043b5f2262bad2d8f2"
+    },
+    "small_dl_onnx": {
+      "macro_f1": 0.968290081763242,
+      "latency_ms": 0.4842,
+      "cost_usd": 0.0,
+      "onnx_artifact": "modelserver/artifacts/dl_tfidf_mlp.onnx",
+      "onnx_artifact_sha256": "f4a21455c389582f29c37f4202a63b6a65134ead0bdbb1f01f72b898092ce651",
+      "vectorizer_artifact": "modelserver/artifacts/dl_tfidf_vectorizer.joblib",
+      "vectorizer_sha256": "0e9d5d1233e063129190e3927ef0294fe76f6883a06264b58b2f73ff4830e172",
+      "label_encoder_artifact": "modelserver/artifacts/label_encoder.joblib",
+      "label_encoder_sha256": "07455a3911d862e0639c13ac4b448fc2a044570f4ed2729c8ca24b0fac00df36",
+      "labels_artifact": "modelserver/artifacts/labels.json",
+      "labels_sha256": "fac71a96957883d4b0dc5c4cfd416355b51323ccbc4a20ea5f37ee5758059d0d"
+    },
+    "llm_zero_shot": {
+      "status": "skipped",
+      "reason": "No API key used in this notebook run.",
+      "macro_f1": null,
+      "per_class_f1": null,
+      "latency_ms": null,
+      "estimated_cost_usd": null
+    }
+  },
+  "chosen_model": "classical_tfidf_logreg",
+  "chosen_artifact": "modelserver/artifacts/classical_tfidf_logreg.joblib",
+  "chosen_artifact_sha256": "7bbe19b36995dd77d56cf70924229ac9bcbc78e1afaad48b85d3e1bbf9dec34d",
+  "decision_summary": "Chosen default is classical TF-IDF + Logistic Regression because it is lean, fast, cost-free at inference, and easy to serve without torch or transformers. The DL model is also exported to ONNX for comparison.",
+  "serving_constraints": {
+    "no_torch_in_serving_container": true,
+    "no_transformers_in_serving_container": true,
+    "training_only_in_notebook": true,
+    "modelserver_must_verify_artifact_sha256_on_boot": true
+  }
 }
