@@ -2,99 +2,139 @@
   "dataset": {
     "name": "UCI SMS Spam Collection",
     "task": "spam detection",
-    "dataset_copy": "evals/classifier/sms_spam_dataset_used.csv",
-    "dataset_sha256": "eca8704055019c57be593a94c9eef123592da27c3a07c705020f5432144f0476",
+    "dataset_copy": "data/SMSSpamCollection",
+    "dataset_sha256": "1587ea43e58e82b14ff1f5425c88e17f8496bfcdb67a583dbff9eefaf9963ce3",
     "train_rows": 4457,
     "test_rows": 1115,
     "labels": [
-      "not_spam",
+      "ham",
       "spam"
     ]
   },
   "classical_tfidf_logreg": {
-    "macro_f1": 0.9592144936169769,
+    "macro_f1": 0.9628870494459774,
+    "accuracy": 0.9829596412556054,
     "classification_report": {
-      "not_spam": {
-        "precision": 0.9886246122026887,
-        "recall": 0.989648033126294,
-        "f1-score": 0.9891360579410243,
+      "ham": {
+        "precision": 0.9886480908152735,
+        "recall": 0.9917184265010351,
+        "f1-score": 0.9901808785529715,
         "support": 966.0
       },
       "spam": {
-        "precision": 0.9324324324324325,
+        "precision": 0.9452054794520548,
         "recall": 0.9261744966442953,
-        "f1-score": 0.9292929292929293,
+        "f1-score": 0.9355932203389831,
         "support": 149.0
       },
-      "accuracy": 0.9811659192825112,
+      "accuracy": 0.9829596412556054,
       "macro avg": {
-        "precision": 0.9605285223175606,
-        "recall": 0.9579112648852947,
-        "f1-score": 0.9592144936169769,
+        "precision": 0.9669267851336641,
+        "recall": 0.9589464615726653,
+        "f1-score": 0.9628870494459774,
         "support": 1115.0
       },
       "weighted avg": {
-        "precision": 0.9811155227087263,
-        "recall": 0.9811659192825112,
-        "f1-score": 0.9811390837988125,
+        "precision": 0.9828427553057492,
+        "recall": 0.9829596412556054,
+        "f1-score": 0.9828862049441067,
         "support": 1115.0
       }
     },
-    "latency_ms": 1.2523,
-    "train_time_seconds": 0.3841,
-    "predict_time_seconds_on_test": 0.0633,
+    "latency_ms": 0.1082090618833942,
+    "train_time_seconds": 1.0768910839999535,
+    "predict_time_seconds_on_test": 0.12065310399998452,
     "cost_usd": 0.0,
     "artifact": "modelserver/artifacts/classical_tfidf_logreg.joblib",
-    "artifact_sha256": "7bbe19b36995dd77d56cf70924229ac9bcbc78e1afaad48b85d3e1bbf9dec34d",
+    "artifact_sha256": "698223d3acab2666482d29ba36a2c2363117f70f17c133a4e5d7f66c9aac3f3a",
+    "onnx_export_status": "created",
     "onnx_artifact": "modelserver/artifacts/classical_tfidf_logreg.onnx",
-    "onnx_sha256": "d8f08af6f77391435afdc386f829e2d2a38ed1a5ae8bfc043b5f2262bad2d8f2"
+    "onnx_sha256": "cc1b45b739ce8685f8d3ab8b43f6cc7ddbfb4826b53064be077efdd09e089bec"
   },
   "small_dl_onnx": {
-    "macro_f1": 0.968290081763242,
+    "macro_f1": 0.971754990373898,
+    "accuracy": 0.9874439461883409,
     "classification_report": {
-      "not_spam": {
-        "precision": 0.9876796714579056,
-        "recall": 0.9958592132505176,
-        "f1-score": 0.9917525773195877,
+      "ham": {
+        "precision": 0.9857142857142858,
+        "recall": 1.0,
+        "f1-score": 0.9928057553956835,
         "support": 966.0
       },
       "spam": {
-        "precision": 0.9716312056737588,
-        "recall": 0.9194630872483222,
-        "f1-score": 0.9448275862068966,
+        "precision": 1.0,
+        "recall": 0.9060402684563759,
+        "f1-score": 0.9507042253521126,
         "support": 149.0
       },
-      "accuracy": 0.9856502242152466,
+      "accuracy": 0.9874439461883409,
       "macro avg": {
-        "precision": 0.9796554385658323,
-        "recall": 0.9576611502494199,
-        "f1-score": 0.968290081763242,
+        "precision": 0.9928571428571429,
+        "recall": 0.9530201342281879,
+        "f1-score": 0.971754990373898,
         "support": 1115.0
       },
       "weighted avg": {
-        "precision": 0.9855350782724008,
-        "recall": 0.9856502242152466,
-        "f1-score": 0.9854818834399545,
+        "precision": 0.9876233183856503,
+        "recall": 0.9874439461883409,
+        "f1-score": 0.9871796316499506,
         "support": 1115.0
       }
     },
-    "latency_ms": 0.4842,
-    "train_time_seconds": 6.3951,
-    "predict_time_seconds_on_test": 0.0493,
+    "latency_ms": 0.007587069955147833,
+    "train_time_seconds": 4.4592921710000155,
+    "predict_time_seconds_on_test": 0.008459582999989834,
     "cost_usd": 0.0,
     "onnx_artifact": "modelserver/artifacts/dl_tfidf_mlp.onnx",
-    "onnx_artifact_sha256": "f4a21455c389582f29c37f4202a63b6a65134ead0bdbb1f01f72b898092ce651",
+    "onnx_artifact_sha256": "1775300d8e3e718b7835e4dee98a4242571a8ea113b80da4531e210ab633ccf8",
     "vectorizer_artifact": "modelserver/artifacts/dl_tfidf_vectorizer.joblib",
-    "vectorizer_sha256": "0e9d5d1233e063129190e3927ef0294fe76f6883a06264b58b2f73ff4830e172",
+    "vectorizer_sha256": "a9a4cb185871b2e4de269bc4bd17b8cbf4d983c8856532cd33bb0f01c10c496a",
     "label_encoder_artifact": "modelserver/artifacts/label_encoder.joblib",
-    "label_encoder_sha256": "07455a3911d862e0639c13ac4b448fc2a044570f4ed2729c8ca24b0fac00df36"
+    "label_encoder_sha256": "b44297fc24d57000e643dff5109674479501e7c15882812f9d6bbd6c64a1289c",
+    "labels_artifact": "modelserver/artifacts/labels.json",
+    "labels_sha256": "b07189ca48a4017cc7d22cfc3642b1dd44520bfb18571462ad5b4b2bfaa18d6f"
   },
   "llm_zero_shot": {
-    "status": "skipped",
-    "reason": "No API key used in this notebook run.",
-    "macro_f1": null,
-    "per_class_f1": null,
-    "latency_ms": null,
-    "estimated_cost_usd": null
+    "status": "completed",
+    "model": "gpt-4o-mini",
+    "sample_size": 100,
+    "macro_f1": 0.9499949994999499,
+    "accuracy": 0.95,
+    "classification_report": {
+      "ham": {
+        "precision": 0.9591836734693877,
+        "recall": 0.94,
+        "f1-score": 0.9494949494949495,
+        "support": 50.0
+      },
+      "spam": {
+        "precision": 0.9411764705882353,
+        "recall": 0.96,
+        "f1-score": 0.9504950495049505,
+        "support": 50.0
+      },
+      "accuracy": 0.95,
+      "macro avg": {
+        "precision": 0.9501800720288115,
+        "recall": 0.95,
+        "f1-score": 0.9499949994999499,
+        "support": 100.0
+      },
+      "weighted avg": {
+        "precision": 0.9501800720288114,
+        "recall": 0.95,
+        "f1-score": 0.94999499949995,
+        "support": 100.0
+      }
+    },
+    "avg_latency_ms": 780.0828302599859,
+    "total_prompt_tokens": 11169,
+    "total_completion_tokens": 100,
+    "estimated_cost_usd": 0.0017353499999999999,
+    "cost_assumption": {
+      "input_usd_per_1m_tokens": 0.15,
+      "output_usd_per_1m_tokens": 0.6
+    },
+    "predictions_artifact": "evals/classifier/llm_zero_shot_predictions.csv"
   }
 }
