@@ -1,4 +1,3 @@
-# Owner: Amer
 [project]
 name = "week8-multi-ai-tenant"
 version = "0.1.0"
@@ -37,6 +36,9 @@ dev = [
     "mypy",
     "types-redis",
 ]
+
+[tool.setuptools]
+packages = ["app", "admin", "frontend", "guardrails", "modelserver"]
 
 [tool.ruff]
 line-length = 100
