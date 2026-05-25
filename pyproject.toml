@@ -1,6 +1,6 @@
 # Owner: Amer
 [project]
-name = "week8-concierge"
+name = "week8-multi-ai-tenant"
 version = "0.1.0"
 description = "Multi-tenant AI SaaS concierge platform"
 requires-python = ">=3.11"
