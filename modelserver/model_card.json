@@ -1,92 +1,120 @@
 {
-  "task": "Spam detection for Concierge inbound visitor messages",
+  "task": "Full router classification for Concierge inbound visitor messages",
   "owner": "Ayoub / Owner C",
   "dataset": {
-    "name": "UCI SMS Spam Collection",
-    "source_url": "https://archive.ics.uci.edu/ml/machine-learning-databases/00228/smsspamcollection.zip",
-    "dataset_sha256": "1587ea43e58e82b14ff1f5425c88e17f8496bfcdb67a583dbff9eefaf9963ce3",
-    "train_rows": 4457,
-    "test_rows": 1115,
-    "split": "80/20 stratified split with random_state=42"
+    "name": "Concierge full router dataset",
+    "task": "full router intent classification",
+    "dataset_copy": "data/concierge_full_router_dataset.csv",
+    "dataset_sha256": "accc5511a525f7a06d78dec2b142e0d4db49ad5a373643825867b1fc49b96bc5",
+    "train_rows": 1963,
+    "test_rows": 491,
+    "labels": [
+      "spam",
+      "faq",
+      "sales_or_contact",
+      "human_request",
+      "ambiguous"
+    ],
+    "sources": {
+      "spam": "UCI SMS Spam Collection",
+      "faq_sales_human_ambiguous": "Concierge curated router examples"
+    },
+    "limitation": "Spam examples come from a public labeled dataset. Other router labels are curated for the product workflow and should be replaced or expanded with real production chat logs after launch."
   },
   "labels": [
-    "ham",
-    "spam"
+    "spam",
+    "faq",
+    "sales_or_contact",
+    "human_request",
+    "ambiguous"
   ],
   "models_compared": {
     "classical_tfidf_logreg": {
-      "macro_f1": 0.9628870494459774,
-      "accuracy": 0.9829596412556054,
-      "latency_ms": 0.1082090618833942,
+      "macro_f1": 1.0,
+      "accuracy": 1.0,
+      "latency_ms": 0.1086075254578536,
       "cost_usd": 0.0,
-      "artifact": "modelserver/artifacts/classical_tfidf_logreg.joblib",
-      "artifact_sha256": "698223d3acab2666482d29ba36a2c2363117f70f17c133a4e5d7f66c9aac3f3a",
-      "onnx_export_status": "created",
-      "onnx_artifact": "modelserver/artifacts/classical_tfidf_logreg.onnx",
-      "onnx_sha256": "cc1b45b739ce8685f8d3ab8b43f6cc7ddbfb4826b53064be077efdd09e089bec"
+      "artifact": "modelserver/artifacts/classical_tfidf_logreg_full_router.joblib",
+      "artifact_sha256": "ef9e7a2de8fcead4631ec34e2913ba2f52dedfac8378ea1d4f862c3cc968359f"
     },
     "small_dl_onnx": {
-      "macro_f1": 0.971754990373898,
-      "accuracy": 0.9874439461883409,
-      "latency_ms": 0.007587069955147833,
+      "macro_f1": 1.0,
+      "accuracy": 1.0,
+      "latency_ms": 0.04605529938915742,
       "cost_usd": 0.0,
-      "onnx_artifact": "modelserver/artifacts/dl_tfidf_mlp.onnx",
-      "onnx_artifact_sha256": "1775300d8e3e718b7835e4dee98a4242571a8ea113b80da4531e210ab633ccf8",
-      "vectorizer_artifact": "modelserver/artifacts/dl_tfidf_vectorizer.joblib",
-      "vectorizer_sha256": "a9a4cb185871b2e4de269bc4bd17b8cbf4d983c8856532cd33bb0f01c10c496a",
-      "label_encoder_artifact": "modelserver/artifacts/label_encoder.joblib",
-      "label_encoder_sha256": "b44297fc24d57000e643dff5109674479501e7c15882812f9d6bbd6c64a1289c",
-      "labels_artifact": "modelserver/artifacts/labels.json",
-      "labels_sha256": "b07189ca48a4017cc7d22cfc3642b1dd44520bfb18571462ad5b4b2bfaa18d6f"
+      "onnx_artifact": "modelserver/artifacts/dl_tfidf_mlp_full_router.onnx",
+      "onnx_artifact_sha256": "866982ae4412928bab3c4c3c9f98935e82ed65a625ec56de3ac3b26709f61c91",
+      "vectorizer_artifact": "modelserver/artifacts/dl_tfidf_vectorizer_full_router.joblib",
+      "vectorizer_sha256": "85df62f0128a09424612c36f3c11ae0c20d4b67b42314c660e287f7359b12685",
+      "label_encoder_artifact": "modelserver/artifacts/label_encoder_full_router.joblib",
+      "label_encoder_sha256": "381d46ddf5f57a62cb3e0e866d0d3ec8ff2872d6f18e907b5792454037b7f03e",
+      "labels_artifact": "modelserver/artifacts/labels_full_router.json",
+      "labels_sha256": "2a23161a8daf68e5a2be6fae42b3435deb055193d52d3f15ad7fcd4b18ef1bd9"
     },
     "llm_zero_shot": {
       "status": "completed",
       "model": "gpt-4o-mini",
       "sample_size": 100,
-      "macro_f1": 0.9499949994999499,
-      "accuracy": 0.95,
+      "macro_f1": 0.6489461358313817,
+      "accuracy": 0.66,
+      "avg_latency_ms": 542.2489734999999,
       "classification_report": {
-        "ham": {
-          "precision": 0.9591836734693877,
-          "recall": 0.94,
-          "f1-score": 0.9494949494949495,
-          "support": 50.0
+        "ambiguous": {
+          "precision": 0.3333333333333333,
+          "recall": 0.7368421052631579,
+          "f1-score": 0.45901639344262296,
+          "support": 19.0
+        },
+        "faq": {
+          "precision": 0.75,
+          "recall": 0.9375,
+          "f1-score": 0.8333333333333334,
+          "support": 16.0
+        },
+        "human_request": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1-score": 0.0,
+          "support": 27.0
+        },
+        "sales_or_contact": {
+          "precision": 0.9523809523809523,
+          "recall": 0.9523809523809523,
+          "f1-score": 0.9523809523809523,
+          "support": 21.0
         },
         "spam": {
-          "precision": 0.9411764705882353,
-          "recall": 0.96,
-          "f1-score": 0.9504950495049505,
-          "support": 50.0
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 17.0
         },
-        "accuracy": 0.95,
+        "accuracy": 0.66,
         "macro avg": {
-          "precision": 0.9501800720288115,
-          "recall": 0.95,
-          "f1-score": 0.9499949994999499,
+          "precision": 0.6071428571428571,
+          "recall": 0.725344611528822,
+          "f1-score": 0.6489461358313817,
           "support": 100.0
         },
         "weighted avg": {
-          "precision": 0.9501800720288114,
-          "recall": 0.95,
-          "f1-score": 0.94999499949995,
+          "precision": 0.5533333333333332,
+          "recall": 0.66,
+          "f1-score": 0.5905464480874317,
           "support": 100.0
         }
       },
-      "avg_latency_ms": 780.0828302599859,
-      "total_prompt_tokens": 11169,
-      "total_completion_tokens": 100,
-      "estimated_cost_usd": 0.0017353499999999999,
-      "cost_assumption": {
-        "input_usd_per_1m_tokens": 0.15,
-        "output_usd_per_1m_tokens": 0.6
-      },
-      "predictions_artifact": "evals/classifier/llm_zero_shot_predictions.csv"
+      "prompt_tokens": 16251,
+      "completion_tokens": 184,
+      "total_tokens": 16435,
+      "estimated_cost_usd": 0.00254805,
+      "cost_note": "Cost estimate uses notebook assumptions; verify current OpenAI pricing before final submission."
     }
   },
+  "best_by_macro_f1": "classical_tfidf_logreg",
   "chosen_model": "classical_tfidf_logreg",
-  "chosen_artifact": "modelserver/artifacts/classical_tfidf_logreg.joblib",
-  "chosen_artifact_sha256": "698223d3acab2666482d29ba36a2c2363117f70f17c133a4e5d7f66c9aac3f3a",
-  "decision_summary": "Chosen default is classical TF-IDF + Logistic Regression because it is lean, fast, cost-free at inference, and easy to serve without torch or transformers. The small DL model is exported to ONNX and the LLM zero-shot baseline is included for comparison, but the LLM has per-call API cost and higher latency.",
+  "chosen_artifact": "modelserver/artifacts/classical_tfidf_logreg_full_router.joblib",
+  "chosen_artifact_sha256": "ef9e7a2de8fcead4631ec34e2913ba2f52dedfac8378ea1d4f862c3cc968359f",
+  "decision_summary": "Compared classical ML, small DL exported to ONNX, and LLM zero-shot. Best by macro-F1 was classical_tfidf_logreg. Chosen production candidate is classical_tfidf_logreg. The LLM baseline is useful for comparison but is not preferred for router classification because local models avoid per-call API cost and have much lower latency.",
   "serving_constraints": {
     "no_torch_in_serving_container": true,
     "no_transformers_in_serving_container": true,
