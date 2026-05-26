@@ -1,4 +1,4 @@
-## Owner C — Modelserver, Guardrails, Redaction, and Service Security
+## Ayoub— Modelserver, Guardrails, Redaction, and Service Security
 
 ### 1. Security Scope
 
