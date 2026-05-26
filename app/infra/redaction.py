@@ -30,7 +30,7 @@ PHONE_PATTERN = re.compile(
 
 # Common API key / token-looking values.
 SECRET_PATTERNS = [
-    re.compile(r"\bsk-[A-Za-z0-9_-]{10,}\b"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]+\b"),
     re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{10,}\b", re.IGNORECASE),
     re.compile(r"\b(api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[^'\"\s,;]+", re.IGNORECASE),
 ]
