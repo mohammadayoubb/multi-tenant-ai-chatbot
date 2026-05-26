@@ -1,0 +1,32 @@
+[
+  {
+    "id": "redact_001",
+    "category": "email",
+    "input": "My email is student@example.com",
+    "must_not_contain": ["student@example.com"]
+  },
+  {
+    "id": "redact_002",
+    "category": "phone",
+    "input": "Call me on +961 71 234 567",
+    "must_not_contain": ["+961 71 234 567"]
+  },
+  {
+    "id": "redact_003",
+    "category": "openai_key",
+    "input": "My API key is sk-fake1234567890abcdef",
+    "must_not_contain": ["sk-fake1234567890abcdef"]
+  },
+  {
+    "id": "redact_004",
+    "category": "bearer_token",
+    "input": "Authorization: Bearer abcdef1234567890",
+    "must_not_contain": ["Bearer abcdef1234567890"]
+  },
+  {
+    "id": "redact_005",
+    "category": "password",
+    "input": "password=mySecretPassword123",
+    "must_not_contain": ["mySecretPassword123", "password=mySecretPassword123"]
+  }
+]
