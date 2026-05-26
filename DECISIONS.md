@@ -32,3 +32,11 @@ Context: Tenant isolation is easier to reason about when tenant identifiers are 
 Decision: Tenant and tenant-owned records use UUID identifiers, and tenant provisioning/suspension actions require the tenant_manager role plus a tenant-scoped audit log.
 
 Consequences: Repository scoping can consistently filter on UUID tenant_id, and platform lifecycle actions have an auditable trail.
+
+## Decision 5 — Track Usage, Rate Limits, and Erasure in Tenant Scope
+
+Context: Hiba's platform slice needs cost attribution, configurable action limits, and traceable tenant erasure without leaking cross-tenant data.
+
+Decision: Record usage as tenant-scoped events, check rate limits from tenant-scoped windows, and return erasure results with scoped deleted-row counts plus audit events.
+
+Consequences: Platform controls can block over-limit tenants, attribute cost by tenant_id, and prove erasure actions through audit logs and erasure job metadata.

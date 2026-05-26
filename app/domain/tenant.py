@@ -27,6 +27,25 @@ class TenantStatus(StrEnum):
     ERASED = "erased"
 
 
+class UsageFeature(StrEnum):
+    """Tenant usage buckets used for cost and rate-limit accounting."""
+
+    CHAT = "chat"
+    EMBEDDING = "embedding"
+    CLASSIFIER = "classifier"
+    RAG = "rag"
+    AGENT = "agent"
+    GUARDRAILS = "guardrails"
+
+
+class UsageUnitType(StrEnum):
+    """Supported usage unit types."""
+
+    TOKENS = "tokens"
+    REQUESTS = "requests"
+    SECONDS = "seconds"
+
+
 class TenantCreate(BaseModel):
     """Tenant provisioning input."""
 
@@ -58,3 +77,36 @@ class AuditLogDomain(BaseModel):
     metadata_json: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+
+class UsageEvent(BaseModel):
+    """Per-tenant usage event for cost attribution."""
+
+    feature: UsageFeature | str
+    units: int = Field(gt=0)
+    unit_type: UsageUnitType | str
+    estimated_cost_usd: float = Field(ge=0)
+    trace_id: str | None = None
+
+
+class RateLimitResult(BaseModel):
+    """Result of checking a tenant-scoped rate limit."""
+
+    tenant_id: UUID
+    action: str
+    allowed: bool
+    limit_count: int | None
+    used: int
+    remaining: int | None
+    window_seconds: int | None
+
+
+class ErasureResult(BaseModel):
+    """Tenant erasure result returned to Tenant Manager workflows."""
+
+    tenant_id: UUID
+    status: str
+    deleted_rows: dict[str, int]
+    deleted_blobs: int = 0
+    deleted_sessions: int = 0
+    trace_id: str
