@@ -2,6 +2,12 @@
 .env
 .env.*
 !.env.example
+
+# Claude Code machine-local state (.claude/skills/ is committed for the team)
+.claude/settings.local.json
+.claude/.credentials*
+.claude/cache/
+
 .venv/
 __pycache__/
 *.py[cod]
@@ -20,3 +26,4 @@ dist/
 build/
 logs/
 *.log
+__pycache__
