@@ -265,12 +265,15 @@ Do not build ahead of the requested phase.
 <!-- SPECKIT START -->
 ## Active Spec-Kit Feature
 
-For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/001-widget-token-exchange/plan.md](specs/001-widget-token-exchange/plan.md).
+For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/002-widget-chat-ui/plan.md](specs/002-widget-chat-ui/plan.md).
 
 Related artifacts:
-- [specs/001-widget-token-exchange/spec.md](specs/001-widget-token-exchange/spec.md)
-- [specs/001-widget-token-exchange/research.md](specs/001-widget-token-exchange/research.md)
-- [specs/001-widget-token-exchange/data-model.md](specs/001-widget-token-exchange/data-model.md)
-- [specs/001-widget-token-exchange/contracts/](specs/001-widget-token-exchange/contracts/)
-- [specs/001-widget-token-exchange/quickstart.md](specs/001-widget-token-exchange/quickstart.md)
+- [specs/002-widget-chat-ui/spec.md](specs/002-widget-chat-ui/spec.md)
+- [specs/002-widget-chat-ui/research.md](specs/002-widget-chat-ui/research.md)
+- [specs/002-widget-chat-ui/data-model.md](specs/002-widget-chat-ui/data-model.md)
+- [specs/002-widget-chat-ui/contracts/](specs/002-widget-chat-ui/contracts/)
+- [specs/002-widget-chat-ui/quickstart.md](specs/002-widget-chat-ui/quickstart.md)
+
+Prior feature (shipped):
+- [specs/001-widget-token-exchange/](specs/001-widget-token-exchange/)
 <!-- SPECKIT END -->

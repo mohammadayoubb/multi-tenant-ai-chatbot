@@ -38,7 +38,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["app", "admin", "frontend", "guardrails", "modelserver"]
+packages = ["app", "admin", "guardrails", "modelserver"]
 
 [tool.ruff]
 line-length = 100

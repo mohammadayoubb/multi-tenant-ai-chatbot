@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { exchangeToken } from "./api";
+import { ChatPane } from "./components/ChatPane";
 import type { HostOriginMessage } from "./types";
 import "./styles.css";
 
@@ -60,10 +61,7 @@ function WidgetApp(): JSX.Element {
   if (status === "ready") {
     return (
       <div className="widget-shell">
-        <h1>Concierge</h1>
-        <div className="messages" />
-        <input placeholder="Ask a question..." />
-        <button>Send</button>
+        <ChatPane backendUrl={backendUrl} />
       </div>
     );
   }
