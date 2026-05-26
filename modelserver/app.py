@@ -1,16 +1,26 @@
-# Owner of this file is Ayoub.
-# This file defines the lean classifier modelserver API.
-# It must stay lightweight: no torch, no transformers, and no training code.
+"""FastAPI app for the Concierge classifier modelserver.
 
-from time import perf_counter
+Owner: Ayoub / Owner C
+
+This service exposes the trained router classifier over HTTP.
+It must stay lean:
+- no torch
+- no transformers
+- no training code
+"""
+
+from __future__ import annotations
+
+import os
 from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
+from modelserver.classifier import ClassifierLoadError, RouterClassifier
 
-# These are the only labels the router should expect from the classifier.
-ClassifierLabel = Literal[
+
+RouterLabel = Literal[
     "spam",
     "faq",
     "sales_or_contact",
@@ -20,15 +30,15 @@ ClassifierLabel = Literal[
 
 
 class PredictRequest(BaseModel):
-    """Request body accepted by the classifier modelserver."""
+    """Request body for classifier prediction."""
 
     message: str = Field(..., min_length=1, max_length=4000)
 
 
 class PredictResponse(BaseModel):
-    """Response returned to the main API/router."""
+    """Response returned by the modelserver."""
 
-    label: ClassifierLabel
+    label: RouterLabel
     confidence: float = Field(..., ge=0.0, le=1.0)
     model_version: str
     latency_ms: float
@@ -36,65 +46,70 @@ class PredictResponse(BaseModel):
 
 app = FastAPI(
     title="Concierge Modelserver",
-    description="Lean classifier service for routing visitor messages.",
+    description="Lean ONNX classifier service for routing visitor messages.",
     version="0.1.0",
 )
 
 
-def verify_service_token(authorization: str | None) -> None:
-    """Validate service-to-service authentication.
+classifier: RouterClassifier | None = None
 
-    Temporary placeholder:
-    - Later, this token must come from Vault.
-    - For now, we only enforce that the header exists and uses Bearer format.
-    - We do not hardcode real secrets here.
+
+def verify_service_auth(authorization: str | None) -> None:
+    """Verify service-to-service authentication.
+
+    For local development, set:
+
+    MODELSERVER_SERVICE_TOKEN=dev-modelserver-token
+
+    Later, the main API should resolve this token from Vault.
     """
 
-    if authorization is None:
+    expected_token = os.getenv("MODELSERVER_SERVICE_TOKEN")
+
+    if not expected_token:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing service authorization header.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Modelserver service token is not configured.",
         )
 
-    if not authorization.startswith("Bearer "):
+    if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid service authorization scheme.",
+            detail="Missing Authorization header.",
+        )
+
+    expected_header = f"Bearer {expected_token}"
+
+    if authorization != expected_header:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid service credentials.",
         )
 
 
-def classify_message(message: str) -> tuple[ClassifierLabel, float]:
-    """Temporary rule-based classifier until the real artifact is connected.
+@app.on_event("startup")
+async def startup() -> None:
+    """Load classifier on startup.
 
-    This keeps the modelserver route testable before training is complete.
-    The real implementation will load a joblib or ONNX artifact.
+    If artifact hash verification fails, the service should fail to start.
     """
 
-    normalized = message.lower()
+    global classifier
 
-    if any(word in normalized for word in ["buy now", "free money", "click here"]):
-        return "spam", 0.90
-
-    if any(word in normalized for word in ["price", "pricing", "quote", "book", "appointment"]):
-        return "sales_or_contact", 0.85
-
-    if any(word in normalized for word in ["human", "agent", "person", "representative"]):
-        return "human_request", 0.88
-
-    if any(word in normalized for word in ["what", "how", "where", "when", "opening hours"]):
-        return "faq", 0.80
-
-    return "ambiguous", 0.55
+    try:
+        classifier = RouterClassifier()
+    except ClassifierLoadError as error:
+        raise RuntimeError(f"Failed to load classifier: {error}") from error
 
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    """Health endpoint used by Docker, CI, and smoke tests."""
+    """Health endpoint for Docker/CI smoke tests."""
 
     return {
         "status": "ok",
         "service": "modelserver",
-        "model_version": "placeholder-v0",
+        "model": "small_dl_onnx",
     }
 
 
@@ -105,20 +120,18 @@ async def predict(
 ) -> PredictResponse:
     """Classify one inbound visitor message.
 
-    Important security rule:
-    The raw message should not be logged here because it may contain PII,
-    secrets, phone numbers, emails, or other sensitive data.
+    Security note:
+    Do not log the raw message here. It may contain PII or secrets.
     """
 
-    verify_service_token(authorization)
+    verify_service_auth(authorization)
 
-    start_time = perf_counter()
-    label, confidence = classify_message(request.message)
-    latency_ms = (perf_counter() - start_time) * 1000
+    if classifier is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Classifier is not loaded.",
+        )
 
-    return PredictResponse(
-        label=label,
-        confidence=confidence,
-        model_version="placeholder-v0",
-        latency_ms=round(latency_ms, 3),
-    )
+    result = classifier.predict(request.message)
+
+    return PredictResponse(**result)
