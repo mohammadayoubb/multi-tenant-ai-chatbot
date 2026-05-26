@@ -259,3 +259,18 @@ Do not build ahead of the requested phase.
 | 9 | Right to erasure | Hiba |
 | 10 | CI/CD and eval gates | Amer |
 | 11 | Documentation | All |
+
+---
+
+<!-- SPECKIT START -->
+## Active Spec-Kit Feature
+
+For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/001-widget-token-exchange/plan.md](specs/001-widget-token-exchange/plan.md).
+
+Related artifacts:
+- [specs/001-widget-token-exchange/spec.md](specs/001-widget-token-exchange/spec.md)
+- [specs/001-widget-token-exchange/research.md](specs/001-widget-token-exchange/research.md)
+- [specs/001-widget-token-exchange/data-model.md](specs/001-widget-token-exchange/data-model.md)
+- [specs/001-widget-token-exchange/contracts/](specs/001-widget-token-exchange/contracts/)
+- [specs/001-widget-token-exchange/quickstart.md](specs/001-widget-token-exchange/quickstart.md)
+<!-- SPECKIT END -->
