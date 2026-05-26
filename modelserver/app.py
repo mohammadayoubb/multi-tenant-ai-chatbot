@@ -18,7 +18,7 @@ from fastapi import FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from modelserver.classifier import ClassifierLoadError, RouterClassifier
-
+from app.infra.service_auth import validate_bearer_token
 
 RouterLabel = Literal[
     "spam",
@@ -55,36 +55,24 @@ classifier: RouterClassifier | None = None
 
 
 def verify_service_auth(authorization: str | None) -> None:
-    """Verify service-to-service authentication.
-
-    For local development, set:
-
-    MODELSERVER_SERVICE_TOKEN=dev-modelserver-token
-
-    Later, the main API should resolve this token from Vault.
-    """
+    """Verify service-to-service authentication."""
 
     expected_token = os.getenv("MODELSERVER_SERVICE_TOKEN")
+    result = validate_bearer_token(authorization, expected_token)
 
-    if not expected_token:
+    if result.is_valid:
+        return
+
+    if result.reason == "Service token is not configured.":
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Modelserver service token is not configured.",
+            detail=result.reason,
         )
 
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header.",
-        )
-
-    expected_header = f"Bearer {expected_token}"
-
-    if authorization != expected_header:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid service credentials.",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=result.reason,
+    )
 
 
 @app.on_event("startup")

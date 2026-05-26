@@ -18,7 +18,7 @@ from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
-
+from app.infra.service_auth import validate_bearer_token
 
 GuardrailDecision = Literal["allow", "block"]
 
@@ -74,34 +74,24 @@ PLATFORM_BLOCK_PATTERNS = {
 
 
 def verify_service_auth(authorization: str | None) -> None:
-    """Verify service-to-service authentication.
-
-    For local development, set:
-
-    GUARDRAILS_SERVICE_TOKEN=dev-guardrails-token
-
-    Later, the API should resolve this token from Vault.
-    """
+    """Verify service-to-service authentication."""
 
     expected_token = os.getenv("GUARDRAILS_SERVICE_TOKEN")
+    result = validate_bearer_token(authorization, expected_token)
 
-    if not expected_token:
+    if result.is_valid:
+        return
+
+    if result.reason == "Service token is not configured.":
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Guardrails service token is not configured.",
+            detail=result.reason,
         )
 
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header.",
-        )
-
-    if authorization != f"Bearer {expected_token}":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid service credentials.",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=result.reason,
+    )
 
 
 def evaluate_platform_rails(message: str) -> GuardrailResponse:
