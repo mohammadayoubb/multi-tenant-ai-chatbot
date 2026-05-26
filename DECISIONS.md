@@ -40,3 +40,11 @@ Context: Hiba's platform slice needs cost attribution, configurable action limit
 Decision: Record usage as tenant-scoped events, check rate limits from tenant-scoped windows, and return erasure results with scoped deleted-row counts plus audit events.
 
 Consequences: Platform controls can block over-limit tenants, attribute cost by tenant_id, and prove erasure actions through audit logs and erasure job metadata.
+
+## Decision 6 — Enforce Tenant Isolation With Postgres RLS Policies
+
+Context: Repository filters are necessary but not enough for the highest-risk tenant-owned tables.
+
+Decision: The initial Hiba migration enables and forces RLS on tenant-owned tables, using `app.tenant_id` as the trusted Postgres session setting.
+
+Consequences: Tenant-owned reads and writes require the server to set tenant context before queries, giving the database a second isolation boundary.
