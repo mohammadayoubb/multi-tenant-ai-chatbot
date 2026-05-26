@@ -1,120 +1,120 @@
 {
-  "task": "Full router classification for Concierge inbound visitor messages",
+  "task": "Five-class router classification for Concierge inbound visitor messages",
   "owner": "Ayoub / Owner C",
   "dataset": {
-    "name": "Concierge full router dataset",
-    "task": "full router intent classification",
-    "dataset_copy": "data/concierge_full_router_dataset.csv",
-    "dataset_sha256": "accc5511a525f7a06d78dec2b142e0d4db49ad5a373643825867b1fc49b96bc5",
-    "train_rows": 1963,
-    "test_rows": 491,
-    "labels": [
-      "spam",
-      "faq",
-      "sales_or_contact",
-      "human_request",
-      "ambiguous"
+    "name": "Combined public Concierge router dataset",
+    "sources": [
+      {
+        "name": "UCI SMS Spam Collection",
+        "used_for": "spam"
+      },
+      {
+        "name": "Bitext Customer Support Intent Dataset",
+        "used_for": "faq, sales_or_contact, human_request"
+      },
+      {
+        "name": "CLINC OOS Dataset",
+        "used_for": "ambiguous"
+      }
     ],
-    "sources": {
-      "spam": "UCI SMS Spam Collection",
-      "faq_sales_human_ambiguous": "Concierge curated router examples"
-    },
-    "limitation": "Spam examples come from a public labeled dataset. Other router labels are curated for the product workflow and should be replaced or expanded with real production chat logs after launch."
+    "dataset_sha256": "4fb092710fa9f22a230ed30233624ccb65abf48ff8c27c0507ee64e2ec4d431c",
+    "dataset_copy": "data/concierge_combined_public_router_dataset.csv",
+    "train_rows": 2753,
+    "test_rows": 689,
+    "split": "80/20 stratified split with random_state=42"
   },
   "labels": [
-    "spam",
+    "ambiguous",
     "faq",
-    "sales_or_contact",
     "human_request",
-    "ambiguous"
+    "sales_or_contact",
+    "spam"
   ],
   "models_compared": {
     "classical_tfidf_logreg": {
-      "macro_f1": 1.0,
-      "accuracy": 1.0,
-      "latency_ms": 0.1086075254578536,
+      "macro_f1": 0.9680256296525975,
+      "accuracy": 0.9680696661828737,
+      "latency_ms": 0.1878843947748314,
       "cost_usd": 0.0,
-      "artifact": "modelserver/artifacts/classical_tfidf_logreg_full_router.joblib",
-      "artifact_sha256": "ef9e7a2de8fcead4631ec34e2913ba2f52dedfac8378ea1d4f862c3cc968359f"
+      "artifact": "modelserver/artifacts/classical_tfidf_logreg_combined_router.joblib",
+      "artifact_sha256": "f692cb1e05ccaf59f40e236be7a0897041204ba9a80da66793977d793050dddf"
     },
     "small_dl_onnx": {
-      "macro_f1": 1.0,
-      "accuracy": 1.0,
-      "latency_ms": 0.04605529938915742,
+      "macro_f1": 0.975232547658873,
+      "accuracy": 0.9753265602322206,
+      "latency_ms": 0.14503073584911907,
       "cost_usd": 0.0,
-      "onnx_artifact": "modelserver/artifacts/dl_tfidf_mlp_full_router.onnx",
-      "onnx_artifact_sha256": "866982ae4412928bab3c4c3c9f98935e82ed65a625ec56de3ac3b26709f61c91",
-      "vectorizer_artifact": "modelserver/artifacts/dl_tfidf_vectorizer_full_router.joblib",
-      "vectorizer_sha256": "85df62f0128a09424612c36f3c11ae0c20d4b67b42314c660e287f7359b12685",
-      "label_encoder_artifact": "modelserver/artifacts/label_encoder_full_router.joblib",
+      "onnx_artifact": "modelserver/artifacts/dl_tfidf_mlp_combined_router.onnx",
+      "onnx_artifact_sha256": "3de67392de388c518f552fb899cfc171c6dd9681988792c8f443788aa8e463c8",
+      "vectorizer_artifact": "modelserver/artifacts/dl_tfidf_vectorizer_combined_router.joblib",
+      "vectorizer_sha256": "a77a8014af04464129cbda02d3dd0aceae38933caf89e52117ff647a7fa9a4d3",
+      "label_encoder_artifact": "modelserver/artifacts/label_encoder_combined_router.joblib",
       "label_encoder_sha256": "381d46ddf5f57a62cb3e0e866d0d3ec8ff2872d6f18e907b5792454037b7f03e",
-      "labels_artifact": "modelserver/artifacts/labels_full_router.json",
+      "labels_artifact": "modelserver/artifacts/labels_combined_router.json",
       "labels_sha256": "2a23161a8daf68e5a2be6fae42b3435deb055193d52d3f15ad7fcd4b18ef1bd9"
     },
     "llm_zero_shot": {
       "status": "completed",
       "model": "gpt-4o-mini",
       "sample_size": 100,
-      "macro_f1": 0.6489461358313817,
-      "accuracy": 0.66,
-      "avg_latency_ms": 542.2489734999999,
+      "macro_f1": 0.5429079787295665,
+      "accuracy": 0.57,
+      "latency_ms": 752.611330480004,
       "classification_report": {
         "ambiguous": {
-          "precision": 0.3333333333333333,
-          "recall": 0.7368421052631579,
-          "f1-score": 0.45901639344262296,
-          "support": 19.0
-        },
-        "faq": {
-          "precision": 0.75,
-          "recall": 0.9375,
-          "f1-score": 0.8333333333333334,
-          "support": 16.0
-        },
-        "human_request": {
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1-score": 0.0,
-          "support": 27.0
-        },
-        "sales_or_contact": {
-          "precision": 0.9523809523809523,
-          "recall": 0.9523809523809523,
-          "f1-score": 0.9523809523809523,
+          "precision": 1.0,
+          "recall": 0.19047619047619047,
+          "f1-score": 0.32,
           "support": 21.0
         },
-        "spam": {
-          "precision": 1.0,
-          "recall": 1.0,
-          "f1-score": 1.0,
-          "support": 17.0
+        "faq": {
+          "precision": 0.3333333333333333,
+          "recall": 0.65,
+          "f1-score": 0.4406779661016949,
+          "support": 20.0
         },
-        "accuracy": 0.66,
+        "human_request": {
+          "precision": 0.5625,
+          "recall": 0.75,
+          "f1-score": 0.6428571428571429,
+          "support": 24.0
+        },
+        "sales_or_contact": {
+          "precision": 0.6666666666666666,
+          "recall": 0.25,
+          "f1-score": 0.36363636363636365,
+          "support": 16.0
+        },
+        "spam": {
+          "precision": 0.9473684210526315,
+          "recall": 0.9473684210526315,
+          "f1-score": 0.9473684210526315,
+          "support": 19.0
+        },
+        "accuracy": 0.57,
         "macro avg": {
-          "precision": 0.6071428571428571,
-          "recall": 0.725344611528822,
-          "f1-score": 0.6489461358313817,
+          "precision": 0.7019736842105263,
+          "recall": 0.5575689223057644,
+          "f1-score": 0.5429079787295665,
           "support": 100.0
         },
         "weighted avg": {
-          "precision": 0.5533333333333332,
-          "recall": 0.66,
-          "f1-score": 0.5905464480874317,
+          "precision": 0.6983333333333333,
+          "recall": 0.57,
+          "f1-score": 0.5478031256878715,
           "support": 100.0
         }
       },
-      "prompt_tokens": 16251,
-      "completion_tokens": 184,
-      "total_tokens": 16435,
-      "estimated_cost_usd": 0.00254805,
-      "cost_note": "Cost estimate uses notebook assumptions; verify current OpenAI pricing before final submission."
+      "prompt_tokens": 17887,
+      "completion_tokens": 148,
+      "estimated_cost_usd": 0.0027718499999999997,
+      "cost_note": "Approximate cost based on notebook assumptions; verify current provider pricing before final submission."
     }
   },
-  "best_by_macro_f1": "classical_tfidf_logreg",
-  "chosen_model": "classical_tfidf_logreg",
-  "chosen_artifact": "modelserver/artifacts/classical_tfidf_logreg_full_router.joblib",
-  "chosen_artifact_sha256": "ef9e7a2de8fcead4631ec34e2913ba2f52dedfac8378ea1d4f862c3cc968359f",
-  "decision_summary": "Compared classical ML, small DL exported to ONNX, and LLM zero-shot. Best by macro-F1 was classical_tfidf_logreg. Chosen production candidate is classical_tfidf_logreg. The LLM baseline is useful for comparison but is not preferred for router classification because local models avoid per-call API cost and have much lower latency.",
+  "chosen_model": "small_dl_onnx",
+  "chosen_artifact": "modelserver/artifacts/dl_tfidf_mlp_combined_router.onnx",
+  "chosen_artifact_sha256": "3de67392de388c518f552fb899cfc171c6dd9681988792c8f443788aa8e463c8",
+  "decision_summary": "The ONNX model performed best with around 0.975 macro-F1, while the LLM baseline was slower, more expensive, and less accurate. So we chose the ONNX model as the best production candidate for the router",
   "serving_constraints": {
     "no_torch_in_serving_container": true,
     "no_transformers_in_serving_container": true,
