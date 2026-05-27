@@ -72,3 +72,21 @@ Decision:
 Consequences: The feature ships behind two clearly-marked, swap-replaceable affordances (role dep + audit stub). Production cannot accidentally execute the affordances: the role-dep mock refuses non-dev environments, and the audit stub silently returns `None` (acceptable until Hiba's implementation ships because no production tenant-admin auth exists yet). Fail-closed semantics (FR-013, contract clause E2) are exercised in tests by injecting a fake `AuditLogger` that raises; the route catches and returns `{"error":"internal"}` 500. When Hiba's deps land, three locations swap: `require_tenant_admin` import in the route, `get_audit_logger` factory in the route, and the `widget_repo` SQL adapter implementation.
 
 References: specs/004-widget-admin-config/research.md §R1, §R2; specs/004-widget-admin-config/plan.md Complexity Tracking; specs/004-widget-admin-config/contracts/audit-log-consumption.md §A1-A6.
+
+## Decision 8 — Admin read-only pages: single placeholder-fallback path, helper extraction post-implementation (Amer, 2026-05-27)
+
+Context: Feature 005 ships four read-only Streamlit admin pages (Tenant overview, CMS list, Leads viewer, Usage dashboard) under Phase 8. Three teammate endpoints these pages consume (audit logs, leads list, tenant usage rollup) are not yet published. Three integration constraints needed explicit decisions:
+
+1. Real admin auth (Hiba-owned) does not exist yet — same situation as Decision 5/7.
+2. Three of five consumed endpoints have no live route; the pages must remain demo-runnable.
+3. Without a clear error-handling rule, four code paths (200 happy / 404 / 5xx / network) would multiply test surface.
+
+Decision:
+
+- **Auth**: each page sends the same `X-Concierge-Role` / `X-Concierge-Tenant-Id` / `X-Concierge-Actor-Id` dev headers that Phase 4's widget admin page already uses (Decision 5). Centralized in [admin/_admin_http.py](admin/_admin_http.py) with a `TODO(hiba-handoff)` marker. Swap-replaceable by Hiba's real admin session in a single edit when it lands.
+- **Single fallback path** (research Decision 5 for this feature): any non-2xx response, any 2xx with missing required fields, **or** any `httpx.HTTPError` collapses to the same canned-sample render with a visible `(placeholder)` caption. Only two render paths exist per page: real data and placeholder. This satisfies FR-003 (placeholder fallback) and FR-013 (friendly error state, no stack trace) with one branch and one extra test per page.
+- **Helper extraction**: `admin/_admin_http.py` was created after — not before — implementation, once the duplicated `_DEV_HEADERS` + `http_client()` pattern was observed in all four new pages (above the ">2 files" threshold from research Decision 8). Per-page LOC dropped from 135/121/118/113 to 114/109/106/98 after extraction, satisfying the ~120 LOC target (FR-014, SC-006). Principle VII respected — no speculative abstraction.
+
+Consequences: Demo is runnable end-to-end before Hiba and Nasser publish their live endpoints. Tests are mock-only via `httpx.MockTransport`; the full new test suite (28 tests) completes in ~1.3 s locally (SC-005). When the live endpoints land, no admin code change is needed — the same renderer takes over the moment a 2xx with required fields arrives. The Widget admin page from Phase 4 remains the only mutating admin surface; a grep audit across the four new page files finds zero `client.put|post|delete|patch(` or write-button matches (FR-002, FR-006, FR-008, FR-010, FR-012, SC-003).
+
+References: specs/005-admin-read-only-pages/research.md Decisions 3, 5, 8; specs/005-admin-read-only-pages/plan.md Constitution Check; specs/005-admin-read-only-pages/contracts/.
