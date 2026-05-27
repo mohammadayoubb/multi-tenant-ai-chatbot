@@ -71,6 +71,7 @@ class InMemoryWidgetRepository:
                 allowed_origins=[
                     "https://customer-site.example",
                     "http://localhost:5500",
+                    "http://localhost:5173",
                 ],
                 enabled=True,
                 tenant_status="active",

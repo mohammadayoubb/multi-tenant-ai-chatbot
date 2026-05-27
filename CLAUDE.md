@@ -265,14 +265,14 @@ Do not build ahead of the requested phase.
 <!-- SPECKIT START -->
 ## Active Spec-Kit Feature
 
-For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/006-ci-eval-gates/plan.md](specs/006-ci-eval-gates/plan.md).
+For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/007-cross-tenant-smoke-e2e/plan.md](specs/007-cross-tenant-smoke-e2e/plan.md).
 
 Related artifacts:
-- [specs/006-ci-eval-gates/spec.md](specs/006-ci-eval-gates/spec.md)
-- [specs/006-ci-eval-gates/research.md](specs/006-ci-eval-gates/research.md)
-- [specs/006-ci-eval-gates/data-model.md](specs/006-ci-eval-gates/data-model.md)
-- [specs/006-ci-eval-gates/contracts/](specs/006-ci-eval-gates/contracts/)
-- [specs/006-ci-eval-gates/quickstart.md](specs/006-ci-eval-gates/quickstart.md)
+- [specs/007-cross-tenant-smoke-e2e/spec.md](specs/007-cross-tenant-smoke-e2e/spec.md)
+- [specs/007-cross-tenant-smoke-e2e/research.md](specs/007-cross-tenant-smoke-e2e/research.md)
+- [specs/007-cross-tenant-smoke-e2e/data-model.md](specs/007-cross-tenant-smoke-e2e/data-model.md)
+- [specs/007-cross-tenant-smoke-e2e/contracts/](specs/007-cross-tenant-smoke-e2e/contracts/)
+- [specs/007-cross-tenant-smoke-e2e/quickstart.md](specs/007-cross-tenant-smoke-e2e/quickstart.md)
 
 Prior features (shipped):
 - [specs/001-widget-token-exchange/](specs/001-widget-token-exchange/)
@@ -280,4 +280,5 @@ Prior features (shipped):
 - [specs/003-widget-loader-hardening/](specs/003-widget-loader-hardening/)
 - [specs/004-widget-admin-config/](specs/004-widget-admin-config/)
 - [specs/005-admin-read-only-pages/](specs/005-admin-read-only-pages/)
+- [specs/006-ci-eval-gates/](specs/006-ci-eval-gates/)
 <!-- SPECKIT END -->

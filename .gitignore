@@ -30,3 +30,8 @@ dist/
 build/
 logs/
 *.log
+
+# Smoke-runner artifact (feature 007). Written to repo root by tests/smoke/test_cross_tenant_e2e.py
+# and uploaded as a CI artifact on failure; not source of truth.
+smoke-report.json
+docker-compose.logs

@@ -226,3 +226,61 @@ jobs:
         with:
           name: redaction-eval-output
           path: redaction-eval.json
+
+  # Cross-tenant end-to-end smoke gate. Runs last because the Compose cold-start
+  # is the most expensive single job; failing eval gates should short-circuit
+  # before paying that cost. See specs/007-cross-tenant-smoke-e2e/.
+  smoke-e2e:
+    needs:
+      - lint-test-build
+      - classifier-eval
+      - rag-eval
+      - agent-tool-eval
+      - red-team
+      - redaction-eval
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SMOKE_E2E_REQUIRE_FULL_STACK: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Bring stack up
+        run: docker compose up -d --wait
+
+      - name: Show stack status
+        if: always()
+        run: docker compose ps
+
+      - name: Run smoke suite
+        run: python scripts/smoke_check.py -v
+
+      - name: Capture compose logs on failure
+        if: failure()
+        run: docker compose logs > docker-compose.logs
+
+      - name: Upload smoke artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-e2e-logs
+          path: |
+            smoke-report.json
+            docker-compose.logs
+
+      - name: Tear stack down
+        if: always()
+        run: docker compose down -v
