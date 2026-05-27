@@ -54,3 +54,21 @@ Decision: Keep the loader hand-authored. The new `vite.config.ts` sets `build.ta
 Consequences: PR diffs touch the actual shipping artifact, not bundler output — reviewers (especially for widget auth surface, which is constitution-risky) read what tenants execute. A vitest case enforces the ES2019 baseline by scanning the source for forbidden post-ES2019 syntax tokens and any `import` statements, so a developer reflexively typing `?.` or `await` at top level fails CI. The contract entity that mediates this — Vite's `public/` passthrough — is a documented Vite feature, not custom plumbing.
 
 References: specs/003-widget-loader-hardening/research.md §R1, §R2, §R3; specs/003-widget-loader-hardening/contracts/widget-loader.md §C8.
+
+## Decision 7 — Widget admin config: mock role dep, deferred schema columns, AuditLogger Protocol (Amer, 2026-05-27)
+
+Context: Feature 004 ships the tenant-admin widget configuration page (`GET /widgets/config`, `PUT /widgets/config`, plus the Streamlit page). Three integration constraints needed an explicit decision rather than a silent workaround:
+
+1. The platform's authenticated `tenant_admin` role dependency (Hiba-owned) does not exist yet.
+2. The `widget_configs` table is missing two columns (`theme_json JSONB`, `greeting TEXT`) that this feature reads and writes.
+3. Hiba's `TenantRepository.add_audit_log` is documented (CONTRACT.md §190) but not yet implemented.
+
+Decision:
+
+- **Role dep**: a mock `require_tenant_admin` in [app/api/deps.py](app/api/deps.py) reads `X-Concierge-Role` / `X-Concierge-Tenant-Id` headers, returns `Optional[TenantAdminContext]`, and refuses to operate outside `CONCIERGE_ENV=dev`. The route checks for `None` and emits the canonical 403 byte-response. Swap-replaceable by Hiba's real dep with a one-line import change once it lands.
+- **Schema-pending columns**: `theme_json` and `greeting` are added to the `WidgetConfigDomain` Pydantic model with `None` defaults and are persisted via the existing `InMemoryWidgetRepository`. No SQL migration is shipped in this PR. **Tagged for Hiba review**; the SQL adapter (which currently raises `NotImplementedError`) lands in the PR that introduces Hiba's `widget_configs` column-add migration.
+- **Audit logger**: a single-method `AuditLogger` Protocol in [app/services/widget_service.py](app/services/widget_service.py) defines the contract surface this feature consumes. The route wires a `_StubAuditLogger` no-op until Hiba's `TenantRepository.add_audit_log` is implemented; tests inject a fake via `app.dependency_overrides`. The two audit action strings `widget.origin_added` and `widget.origin_removed` are pre-existing entries in the audit vocabulary at CONTRACT.md:736-737 — no contract change needed.
+
+Consequences: The feature ships behind two clearly-marked, swap-replaceable affordances (role dep + audit stub). Production cannot accidentally execute the affordances: the role-dep mock refuses non-dev environments, and the audit stub silently returns `None` (acceptable until Hiba's implementation ships because no production tenant-admin auth exists yet). Fail-closed semantics (FR-013, contract clause E2) are exercised in tests by injecting a fake `AuditLogger` that raises; the route catches and returns `{"error":"internal"}` 500. When Hiba's deps land, three locations swap: `require_tenant_admin` import in the route, `get_audit_logger` factory in the route, and the `widget_repo` SQL adapter implementation.
+
+References: specs/004-widget-admin-config/research.md §R1, §R2; specs/004-widget-admin-config/plan.md Complexity Tracking; specs/004-widget-admin-config/contracts/audit-log-consumption.md §A1-A6.
