@@ -1,14 +1,20 @@
 # Owner: Nasser
 """Bounded tool-calling agent.
 
-The agent must have a max iteration and token budget. This implementation keeps
-an explicit allowlist of the three project tools and uses lightweight planning
-rules until the hosted LLM adapter is connected.
+The router handles easy messages first. Only ambiguous or multi-step messages
+reach this agent.
+
+The agent is bounded by:
+- a max iteration count
+- a per-turn token budget
+- a strict tool allowlist
+- tenant_id passed only from trusted backend context
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +23,9 @@ from app.infra.cache import MemoryMessage
 
 MAX_AGENT_ITERATIONS = 5
 MAX_AGENT_TOKENS_PER_TURN = 4000
-ALLOWED_TOOLS = {"rag_search", "capture_lead", "escalate"}
+
+ToolName = Literal["rag_search", "capture_lead", "escalate"]
+ALLOWED_TOOLS: set[ToolName] = {"rag_search", "capture_lead", "escalate"}
 
 
 @dataclass
@@ -31,6 +39,14 @@ class AgentResult:
     escalated: bool = False
 
 
+@dataclass(frozen=True)
+class _AgentPlan:
+    """Lightweight deterministic plan until hosted LLM tool-calling is wired."""
+
+    tools: list[ToolName]
+    reason: str
+
+
 async def run_agent(
     tenant_id: int,
     message: str,
@@ -40,127 +56,257 @@ async def run_agent(
 ) -> AgentResult:
     """Run the bounded agent path.
 
-    The model/visitor never supplies trusted tenant_id. The service layer passes
-    tenant_id from the verified widget token.
+    tenant_id must come from the verified widget/backend context. The model,
+    visitor, or message text never decides the tenant.
     """
 
-    del memory  # reserved for hosted LLM prompt context once the adapter is wired
-
-    remaining_budget = MAX_AGENT_TOKENS_PER_TURN - _rough_token_count(message)
-    if remaining_budget <= 0:
-        escalation = await escalate(
+    cleaned_message = message.strip()
+    if not cleaned_message:
+        result = await _call_tool(
+            tool_name="escalate",
             tenant_id=tenant_id,
-            conversation_id=session_id,
-            reason="Visitor message exceeded per-turn token budget.",
+            session_id=session_id,
+            message=message,
+            session=session,
+            reason="Empty message reached agent path.",
+        )
+        return AgentResult(
+            answer="I could not process an empty message, so I escalated this conversation.",
+            used_tools=["escalate"],
+            escalated=result.get("status") == "escalated",
+        )
+
+    budget_used = _rough_token_count(cleaned_message) + _memory_token_count(memory)
+    remaining_budget = MAX_AGENT_TOKENS_PER_TURN - budget_used
+
+    if remaining_budget <= 0:
+        result = await _call_tool(
+            tool_name="escalate",
+            tenant_id=tenant_id,
+            session_id=session_id,
+            message=message,
+            session=session,
+            reason="Visitor turn exceeded the agent token budget.",
         )
         return AgentResult(
             answer="This message is too large for one turn, so I escalated it to a human.",
             used_tools=["escalate"],
-            escalated=True,
-            citations=[],
+            escalated=result.get("status") == "escalated",
         )
 
-    lowered = message.lower()
+    plan = _plan_tools(cleaned_message)
+
     used_tools: list[str] = []
     citations: list[dict[str, object]] = []
+    answer_parts: list[str] = []
+    escalated = False
 
-    for iteration in range(MAX_AGENT_ITERATIONS):
-        if iteration == 0 and _needs_human(lowered):
-            result = await escalate(
-                tenant_id=tenant_id,
-                conversation_id=session_id,
-                reason="Visitor explicitly requested a human or the request is out of scope.",
-            )
-            used_tools.append("escalate")
-            return AgentResult(
-                answer="I escalated this conversation to a human so the team can follow up.",
-                used_tools=used_tools,
-                citations=citations,
-                escalated=result["status"] == "escalated",
-            )
+    for iteration, tool_name in enumerate(plan.tools, start=1):
+        if iteration > MAX_AGENT_ITERATIONS:
+            break
 
-        if iteration == 0 and _needs_lead_capture(lowered):
-            name, contact = extract_lead_fields(message)
-            result = await capture_lead(
+        if tool_name not in ALLOWED_TOOLS:
+            result = await _call_tool(
+                tool_name="escalate",
                 tenant_id=tenant_id,
-                name=name,
-                contact=contact,
-                intent=message,
+                session_id=session_id,
+                message=message,
                 session=session,
+                reason=f"Agent attempted disallowed tool: {tool_name}",
             )
-            used_tools.append("capture_lead")
-            if contact is None:
-                return AgentResult(
-                    answer=(
-                        "I can help arrange follow-up. Please share an email or phone number "
-                        "so the team can contact you."
-                    ),
-                    used_tools=used_tools,
-                    citations=citations,
-                )
             return AgentResult(
-                answer=f"Thanks — I captured your request for follow-up. Lead status: {result['status']}.",
-                used_tools=used_tools,
+                answer="I could not complete this safely, so I escalated it to a human.",
+                used_tools=[*used_tools, "escalate"],
                 citations=citations,
+                escalated=result.get("status") == "escalated",
             )
 
-        rag_result = await rag_search(
+        result = await _call_tool(
+            tool_name=tool_name,
+            tenant_id=tenant_id,
+            session_id=session_id,
+            message=cleaned_message,
+            session=session,
+            reason=plan.reason,
+        )
+
+        used_tools.append(tool_name)
+
+        if tool_name == "rag_search":
+            answer_parts.append(str(result.get("answer", "")))
+            raw_chunks = result.get("chunks", [])
+            if isinstance(raw_chunks, list):
+                citations.extend(chunk for chunk in raw_chunks if isinstance(chunk, dict))
+
+        elif tool_name == "capture_lead":
+            if result.get("has_contact") is False:
+                answer_parts.append(
+                    "I can help arrange follow-up. Please share an email or phone number "
+                    "so the team can contact you."
+                )
+            else:
+                answer_parts.append(
+                    f"I captured this as a follow-up request. Lead status: {result.get('status', 'captured')}."
+                )
+
+        elif tool_name == "escalate":
+            escalated = result.get("status") == "escalated"
+            answer_parts.append("I escalated this conversation to a human so the team can follow up.")
+            break
+
+    if not answer_parts:
+        result = await _call_tool(
+            tool_name="escalate",
+            tenant_id=tenant_id,
+            session_id=session_id,
+            message=message,
+            session=session,
+            reason="Agent produced no answer within allowed tool plan.",
+        )
+        return AgentResult(
+            answer="I could not resolve this safely, so I escalated it.",
+            used_tools=[*used_tools, "escalate"],
+            citations=citations,
+            escalated=result.get("status") == "escalated",
+        )
+
+    return AgentResult(
+        answer="\n\n".join(part for part in answer_parts if part.strip()),
+        used_tools=used_tools,
+        citations=citations,
+        escalated=escalated,
+    )
+
+
+def _plan_tools(message: str) -> _AgentPlan:
+    """Choose a bounded tool plan.
+
+    This is a deterministic stand-in for hosted LLM tool-calling. It still
+    demonstrates the production pattern: the agent selects from a strict tool
+    allowlist and may use multiple tools for one hard turn.
+    """
+
+    lowered = message.lower()
+
+    if _needs_human(lowered):
+        return _AgentPlan(
+            tools=["escalate"],
+            reason="Visitor explicitly requested human help or the request is out of scope.",
+        )
+
+    needs_lead = _needs_lead_capture(lowered)
+    needs_knowledge = _needs_knowledge_lookup(lowered)
+
+    if needs_knowledge and needs_lead:
+        return _AgentPlan(
+            tools=["rag_search", "capture_lead"],
+            reason="Visitor asked for information and also showed follow-up/sales intent.",
+        )
+
+    if needs_lead:
+        return _AgentPlan(
+            tools=["capture_lead"],
+            reason="Visitor showed follow-up or sales intent.",
+        )
+
+    return _AgentPlan(
+        tools=["rag_search"],
+        reason="Visitor asked for tenant knowledge.",
+    )
+
+
+async def _call_tool(
+    tool_name: ToolName,
+    tenant_id: int,
+    session_id: str,
+    message: str,
+    session: AsyncSession | None,
+    reason: str,
+) -> dict[str, Any]:
+    """Call one allowed tool with tenant-scoped arguments."""
+
+    if tool_name not in ALLOWED_TOOLS:
+        raise ValueError(f"Disallowed tool requested: {tool_name}")
+
+    if tool_name == "rag_search":
+        return await rag_search(
             tenant_id=tenant_id,
             query=message,
             top_k=5,
             session=session,
         )
-        used_tools.append("rag_search")
-        chunks = list(rag_result.get("chunks", []))
-        citations = [chunk for chunk in chunks if isinstance(chunk, dict)]
-        answer = str(rag_result["answer"])
 
-        if _needs_lead_capture(lowered):
-            name, contact = extract_lead_fields(message)
-            await capture_lead(
-                tenant_id=tenant_id,
-                name=name,
-                contact=contact,
-                intent=message,
-                session=session,
-            )
-            used_tools.append("capture_lead")
-            answer = f"{answer}\n\nI also captured this as a follow-up request for the tenant team."
-
-        return AgentResult(
-            answer=answer,
-            used_tools=used_tools,
-            citations=citations,
+    if tool_name == "capture_lead":
+        name, contact = extract_lead_fields(message)
+        return await capture_lead(
+            tenant_id=tenant_id,
+            name=name,
+            contact=contact,
+            intent=message,
+            session=session,
         )
 
-    escalation = await escalate(
+    return await escalate(
         tenant_id=tenant_id,
         conversation_id=session_id,
-        reason="Agent reached maximum tool-call iterations.",
-    )
-    return AgentResult(
-        answer="I could not resolve this safely in the allowed tool budget, so I escalated it.",
-        used_tools=[*used_tools, "escalate"],
-        citations=citations,
-        escalated=escalation["status"] == "escalated",
+        reason=reason,
     )
 
 
 def _needs_human(lowered_message: str) -> bool:
+    """Detect explicit human handoff requests."""
+
     return any(
         term in lowered_message
-        for term in ("human", "person", "representative", "manager", "support team")
+        for term in (
+            "human",
+            "real person",
+            "live person",
+            "representative",
+            "manager",
+            "support team",
+            "talk to someone",
+            "speak to someone",
+            "live agent",
+        )
     )
 
 
 def _needs_lead_capture(lowered_message: str) -> bool:
+    """Detect follow-up/sales/contact intent."""
+
     return any(
         term in lowered_message
-        for term in ("contact", "call me", "email me", "quote", "pricing", "demo", "sales")
+        for term in (
+            "contact",
+            "call me",
+            "email me",
+            "quote",
+            "pricing",
+            "demo",
+            "sales",
+            "book a meeting",
+        )
     )
+
+
+def _needs_knowledge_lookup(lowered_message: str) -> bool:
+    """Detect whether the visitor is asking for tenant knowledge."""
+
+    question_terms = ("what", "how", "when", "where", "why", "do you", "can you", "?")
+    return any(term in lowered_message for term in question_terms)
 
 
 def _rough_token_count(text: str) -> int:
     """Approximate tokens without importing tokenizer dependencies."""
 
     return max(1, len(text.split()))
+
+
+def _memory_token_count(memory: list[MemoryMessage] | None) -> int:
+    """Approximate memory token usage for the per-turn budget."""
+
+    if not memory:
+        return 0
+
+    return sum(_rough_token_count(item.content) for item in memory[-6:])
