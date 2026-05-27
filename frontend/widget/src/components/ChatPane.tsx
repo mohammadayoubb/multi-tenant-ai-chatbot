@@ -133,62 +133,99 @@ export function ChatPane({ backendUrl }: ChatPaneProps): JSX.Element {
   const showTicketPill = lastAssistant?.ticket_id ? lastAssistant.ticket_id : null;
 
   return (
-    <div className="chat-pane">
-      <div
-        ref={listRef}
-        className="message-list"
-        data-testid="message-list"
-      >
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            data-testid={
-              m.role === "user" ? "message-bubble--user" : "message-bubble--assistant"
-            }
-            className={`message-bubble message-bubble--${m.role}`}
-          >
-            {m.content}
-          </div>
-        ))}
-        {status === "sending" && (
-          <div className="message-loading" data-testid="loading-indicator">
-            …
-          </div>
-        )}
-        {showTicketPill && (
-          <span className="ticket-pill" data-testid="ticket-pill">
-            Ticket #{showTicketPill}
+    <>
+      <header className="chat-header">
+        <div className="chat-header__avatar" aria-hidden="true">
+          C
+        </div>
+        <div className="chat-header__meta">
+          <span className="chat-header__title">Concierge</span>
+          <span className="chat-header__status">
+            <span className="chat-header__dot" aria-hidden="true" />
+            Online — typically replies instantly
           </span>
+        </div>
+      </header>
+
+      <div className="chat-pane">
+        <div
+          ref={listRef}
+          className="message-list"
+          data-testid="message-list"
+        >
+          {messages.length === 0 && status !== "sending" && (
+            <div className="empty-state" aria-hidden="true">
+              <div className="empty-state__icon">
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <div className="empty-state__title">How can we help?</div>
+              <div className="empty-state__sub">
+                Ask anything about our products, pricing, or account.
+              </div>
+            </div>
+          )}
+          {messages.map((m) => (
+            <div
+              key={m.id}
+              data-testid={
+                m.role === "user" ? "message-bubble--user" : "message-bubble--assistant"
+              }
+              className={`message-bubble message-bubble--${m.role}`}
+            >
+              {m.content}
+            </div>
+          ))}
+          {status === "sending" && (
+            <div className="message-loading" data-testid="loading-indicator">
+              <span />
+            </div>
+          )}
+          {showTicketPill && (
+            <span className="ticket-pill" data-testid="ticket-pill">
+              Ticket #{showTicketPill}
+            </span>
+          )}
+        </div>
+
+        {status === "expired" && (
+          <div className="status-banner status-banner--expired" role="status">
+            Session expired, please reload
+          </div>
         )}
+
+        {status === "error" && (
+          <div className="status-banner status-banner--error" role="alert">
+            <span>Couldn&apos;t reach the assistant.</span>
+            <button
+              type="button"
+              data-testid="retry-button"
+              onClick={() => {
+                void retryLast();
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        <ChatInput
+          disabled={status === "sending" || status === "expired"}
+          onSubmit={(text) => {
+            void dispatch(text);
+          }}
+        />
       </div>
-
-      {status === "expired" && (
-        <div className="status-banner status-banner--expired" role="status">
-          Session expired, please reload
-        </div>
-      )}
-
-      {status === "error" && (
-        <div className="status-banner status-banner--error" role="alert">
-          <span>Couldn&apos;t reach the assistant.</span>
-          <button
-            type="button"
-            data-testid="retry-button"
-            onClick={() => {
-              void retryLast();
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      <ChatInput
-        disabled={status === "sending" || status === "expired"}
-        onSubmit={(text) => {
-          void dispatch(text);
-        }}
-      />
-    </div>
+    </>
   );
 }
