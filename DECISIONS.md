@@ -90,3 +90,23 @@ Decision:
 Consequences: Demo is runnable end-to-end before Hiba and Nasser publish their live endpoints. Tests are mock-only via `httpx.MockTransport`; the full new test suite (28 tests) completes in ~1.3 s locally (SC-005). When the live endpoints land, no admin code change is needed — the same renderer takes over the moment a 2xx with required fields arrives. The Widget admin page from Phase 4 remains the only mutating admin surface; a grep audit across the four new page files finds zero `client.put|post|delete|patch(` or write-button matches (FR-002, FR-006, FR-008, FR-010, FR-012, SC-003).
 
 References: specs/005-admin-read-only-pages/research.md Decisions 3, 5, 8; specs/005-admin-read-only-pages/plan.md Constitution Check; specs/005-admin-read-only-pages/contracts/.
+
+## Decision 9 — CI Eval Gates Enforced (Amer, 2026-05-27)
+
+Context: Phase 10 of the constitution (CI/CD and eval gates) requires the project's quality gates in `eval_thresholds.yaml` to be enforced on every PR. Until this PR, the thresholds were aspirational — committed to disk but not wired into CI. None of the five eval CLIs (classifier, RAG, agent tool-selection, red-team, redaction) yet exist; Ayoub (three gates) and Nasser (two gates) own those CLIs and will deliver them in follow-up PRs in their own respective phases.
+
+Decision: The CI workflow runs one job per gate after `lint-test-build`. Each job invokes the gate's CLI (`python -m evals.<gate> --output <path>`), pipes the JSON output through `scripts/check_threshold.py` against `eval_thresholds.yaml`, and uploads the JSON as a workflow artifact. The threshold checker is the sole arbiter of pass/fail. Eval jobs run only on `pull_request` and on `push` to `main` — feature-branch pushes get fast lint/test/build feedback only. Mocks ship in this PR for every CLI so the gates light up immediately; each mock emits passing JSON, a `"_mock": true` field, and a `MOCK EVALUATOR: <gate> ...` stderr line that reviewers can grep across CI logs to find unfulfilled gates. Owners replace their mocks in follow-up PRs without touching `ci.yml` or the threshold checker.
+
+| Gate (CI job) | Threshold key (`eval_thresholds.yaml`) | Threshold | Owner | Eval script |
+|---|---|---|---|---|
+| `classifier-eval` | `classifier.macro_f1_min` | ≥ 0.80 | Ayoub | [evals/classifier.py](evals/classifier.py) (mock) |
+| `rag-eval` | `rag.hit_at_5_min`, `rag.faithfulness_min` | ≥ 0.75, ≥ 0.80 | Nasser | [evals/rag.py](evals/rag.py) (mock) |
+| `agent-tool-eval` | `agent_tool_selection.accuracy_min` | ≥ 0.90 | Nasser | [evals/agent_tool.py](evals/agent_tool.py) (mock) |
+| `red-team` | `red_team.required_refusal_rate` | == 1.0 | Ayoub | [evals/red_team.py](evals/red_team.py) (mock) |
+| `redaction-eval` | `redaction.required_secret_leak_count` | == 0 | Ayoub | [evals/redaction.py](evals/redaction.py) (mock) |
+
+**Known gap — RAG MRR not wired**: the constitution `## Quality Gates` table lists `RAG MRR ≥ 0.50` as an enforced gate, but `eval_thresholds.yaml` has no `mrr_min` key. This PR wires exactly the gates present in `eval_thresholds.yaml` (per spec FR-014), so the MRR gate is NOT wired. Closing the gap requires Ayoub to add `rag.mrr_min: 0.50` to `eval_thresholds.yaml` (he owns that file) and Nasser to emit `metrics.mrr` from `evals/rag.py` (he owns that module). Both happen in follow-up PRs and reuse this PR's threshold-checker contract without modification.
+
+Consequences: Quality regressions are now blocked at PR time, not caught post-merge. The five mock files are clearly marked `# Owner: Ayoub|Nasser (TEMPORARY MOCK by Amer ...)`; the JSON `_mock: true` field and the stderr `MOCK EVALUATOR` banner mean reviewers cannot mistake a mock-green run for a real-green run. Eval CLIs run only on PRs and `main`, sparing feature-branch CI minutes. The shared `python -m evals.<gate> --output <path>` contract plus `scripts/check_threshold.py` form a stable seam: when Ayoub or Nasser delivers a real evaluator, no workflow or helper-script change is needed — a single file replacement at `evals/<gate>.py` is sufficient.
+
+References: specs/006-ci-eval-gates/spec.md Assumptions, FR-001 through FR-014, SC-001 through SC-006; specs/006-ci-eval-gates/research.md §R1 (mocks vs. enabled flag), §R5 (five jobs not matrix), §R7 (trigger refinement), §R8 (Decision numbering); specs/006-ci-eval-gates/contracts/eval-cli.md; specs/006-ci-eval-gates/contracts/threshold-checker.md; constitution `## Quality Gates`; CONTRACT.md §16.

@@ -265,18 +265,19 @@ Do not build ahead of the requested phase.
 <!-- SPECKIT START -->
 ## Active Spec-Kit Feature
 
-For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/005-admin-read-only-pages/plan.md](specs/005-admin-read-only-pages/plan.md).
+For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/006-ci-eval-gates/plan.md](specs/006-ci-eval-gates/plan.md).
 
 Related artifacts:
-- [specs/005-admin-read-only-pages/spec.md](specs/005-admin-read-only-pages/spec.md)
-- [specs/005-admin-read-only-pages/research.md](specs/005-admin-read-only-pages/research.md)
-- [specs/005-admin-read-only-pages/data-model.md](specs/005-admin-read-only-pages/data-model.md)
-- [specs/005-admin-read-only-pages/contracts/](specs/005-admin-read-only-pages/contracts/)
-- [specs/005-admin-read-only-pages/quickstart.md](specs/005-admin-read-only-pages/quickstart.md)
+- [specs/006-ci-eval-gates/spec.md](specs/006-ci-eval-gates/spec.md)
+- [specs/006-ci-eval-gates/research.md](specs/006-ci-eval-gates/research.md)
+- [specs/006-ci-eval-gates/data-model.md](specs/006-ci-eval-gates/data-model.md)
+- [specs/006-ci-eval-gates/contracts/](specs/006-ci-eval-gates/contracts/)
+- [specs/006-ci-eval-gates/quickstart.md](specs/006-ci-eval-gates/quickstart.md)
 
 Prior features (shipped):
 - [specs/001-widget-token-exchange/](specs/001-widget-token-exchange/)
 - [specs/002-widget-chat-ui/](specs/002-widget-chat-ui/)
 - [specs/003-widget-loader-hardening/](specs/003-widget-loader-hardening/)
 - [specs/004-widget-admin-config/](specs/004-widget-admin-config/)
+- [specs/005-admin-read-only-pages/](specs/005-admin-read-only-pages/)
 <!-- SPECKIT END -->

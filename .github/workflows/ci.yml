@@ -1,4 +1,34 @@
 # Owner: Amer
+#
+# CI workflow — Concierge multi-tenant chatbot
+#
+# This workflow enforces the project quality gates listed in eval_thresholds.yaml.
+# Each eval gate runs as its own job after lint-test-build succeeds. Eval jobs
+# run only on pull_request events and on push to main; feature-branch pushes get
+# fast lint/test/build feedback without paying for the eval jobs.
+#
+# Enforced eval gates (one job per row):
+#
+#   Job name            | Threshold key in eval_thresholds.yaml          | Threshold | Owner   | Eval module
+#   --------------------|------------------------------------------------|-----------|---------|----------------------
+#   classifier-eval     | classifier.macro_f1_min                        | >= 0.80   | Ayoub   | python -m evals.classifier
+#   rag-eval            | rag.hit_at_5_min & rag.faithfulness_min        | >= 0.75 / >= 0.80 | Nasser | python -m evals.rag
+#   agent-tool-eval     | agent_tool_selection.accuracy_min              | >= 0.90   | Nasser  | python -m evals.agent_tool
+#   red-team            | red_team.required_refusal_rate                 | == 1.00   | Ayoub   | python -m evals.red_team
+#   redaction-eval      | redaction.required_secret_leak_count           | == 0      | Ayoub   | python -m evals.redaction
+#
+# Each eval CLI follows the contract at specs/006-ci-eval-gates/contracts/eval-cli.md.
+# The threshold checker at scripts/check_threshold.py is the sole arbiter of pass/fail
+# per specs/006-ci-eval-gates/contracts/threshold-checker.md.
+#
+# Mocks ship in this PR for every eval module so CI is immediately green; real
+# CLIs land in follow-up PRs by the named owners. See DECISIONS.md (Decision 9)
+# and specs/006-ci-eval-gates/spec.md for the full background.
+#
+# Why five separate jobs (not a matrix): each gate has a different owner and
+# distinct failure semantics; one named check per gate keeps the PR page scannable.
+# See specs/006-ci-eval-gates/research.md §R5.
+
 name: CI
 
 on:
@@ -30,3 +60,169 @@ jobs:
 
       - name: Docker build
         run: docker compose build
+
+  classifier-eval:
+    needs: lint-test-build
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Run classifier evaluator
+        run: python -m evals.classifier --output classifier-eval.json
+
+      - name: Check classifier macro_f1 threshold
+        run: python scripts/check_threshold.py --gate classifier --metric macro_f1_min --json classifier-eval.json
+
+      - name: Upload classifier eval output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: classifier-eval-output
+          path: classifier-eval.json
+
+  rag-eval:
+    needs: lint-test-build
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Run RAG evaluator
+        run: python -m evals.rag --output rag-eval.json
+
+      - name: Check RAG hit@5 threshold
+        run: python scripts/check_threshold.py --gate rag --metric hit_at_5_min --json rag-eval.json
+
+      - name: Check RAG faithfulness threshold
+        run: python scripts/check_threshold.py --gate rag --metric faithfulness_min --json rag-eval.json
+
+      - name: Upload RAG eval output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag-eval-output
+          path: rag-eval.json
+
+  agent-tool-eval:
+    needs: lint-test-build
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev]"
+
+      # NOTE: three intentional spellings — agent_tool_selection (gate key in
+      # eval_thresholds.yaml), evals.agent_tool (module), agent-tool-eval (job
+      # name). Not a typo. See specs/006-ci-eval-gates/data-model.md E1.
+      - name: Run agent tool-selection evaluator
+        run: python -m evals.agent_tool --output agent-tool-eval.json
+
+      - name: Check agent tool-selection accuracy threshold
+        run: python scripts/check_threshold.py --gate agent_tool_selection --metric accuracy_min --json agent-tool-eval.json
+
+      - name: Upload agent tool-selection eval output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-tool-eval-output
+          path: agent-tool-eval.json
+
+  red-team:
+    needs: lint-test-build
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Run red-team evaluator
+        run: python -m evals.red_team --output red-team-eval.json
+
+      - name: Check red-team refusal_rate threshold
+        run: python scripts/check_threshold.py --gate red_team --metric required_refusal_rate --json red-team-eval.json
+
+      - name: Upload red-team eval output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: red-team-eval-output
+          path: red-team-eval.json
+
+  redaction-eval:
+    needs: lint-test-build
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Run redaction evaluator
+        run: python -m evals.redaction --output redaction-eval.json
+
+      - name: Check redaction secret_leak_count threshold
+        run: python scripts/check_threshold.py --gate redaction --metric required_secret_leak_count --json redaction-eval.json
+
+      - name: Upload redaction eval output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redaction-eval-output
+          path: redaction-eval.json
