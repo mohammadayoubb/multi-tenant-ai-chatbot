@@ -37,8 +37,9 @@ dev = [
     "types-redis",
 ]
 
-[tool.setuptools]
-packages = ["app", "admin", "frontend", "guardrails", "modelserver"]
+[tool.setuptools.packages.find]
+include = ["app*", "admin*", "guardrails*", "modelserver*"]
+exclude = ["frontend*", "tests*"]
 
 [tool.ruff]
 line-length = 100
