@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     vault_root_token: str = Field(default="root")
     model_server_url: str = Field(default="http://localhost:8010")
     guardrails_url: str = Field(default="http://localhost:8020")
+    modelserver_service_token: str = Field(default="")
+    guardrails_service_token: str = Field(default="")
     widget_token_ttl_seconds: int = 900
     session_memory_ttl_seconds: int = 1800
 
