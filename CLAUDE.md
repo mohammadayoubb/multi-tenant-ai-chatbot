@@ -265,17 +265,18 @@ Do not build ahead of the requested phase.
 <!-- SPECKIT START -->
 ## Active Spec-Kit Feature
 
-For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/004-widget-admin-config/plan.md](specs/004-widget-admin-config/plan.md).
+For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/005-admin-read-only-pages/plan.md](specs/005-admin-read-only-pages/plan.md).
 
 Related artifacts:
-- [specs/004-widget-admin-config/spec.md](specs/004-widget-admin-config/spec.md)
-- [specs/004-widget-admin-config/research.md](specs/004-widget-admin-config/research.md)
-- [specs/004-widget-admin-config/data-model.md](specs/004-widget-admin-config/data-model.md)
-- [specs/004-widget-admin-config/contracts/](specs/004-widget-admin-config/contracts/)
-- [specs/004-widget-admin-config/quickstart.md](specs/004-widget-admin-config/quickstart.md)
+- [specs/005-admin-read-only-pages/spec.md](specs/005-admin-read-only-pages/spec.md)
+- [specs/005-admin-read-only-pages/research.md](specs/005-admin-read-only-pages/research.md)
+- [specs/005-admin-read-only-pages/data-model.md](specs/005-admin-read-only-pages/data-model.md)
+- [specs/005-admin-read-only-pages/contracts/](specs/005-admin-read-only-pages/contracts/)
+- [specs/005-admin-read-only-pages/quickstart.md](specs/005-admin-read-only-pages/quickstart.md)
 
 Prior features (shipped):
 - [specs/001-widget-token-exchange/](specs/001-widget-token-exchange/)
 - [specs/002-widget-chat-ui/](specs/002-widget-chat-ui/)
 - [specs/003-widget-loader-hardening/](specs/003-widget-loader-hardening/)
+- [specs/004-widget-admin-config/](specs/004-widget-admin-config/)
 <!-- SPECKIT END -->

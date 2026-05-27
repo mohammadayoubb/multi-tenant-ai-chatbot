@@ -37,16 +37,22 @@ def _http_client() -> httpx.Client:
 
 
 def _fetch_config() -> dict[str, Any] | None:
-    with _http_client() as client:
-        resp = client.get("/widgets/config")
+    try:
+        with _http_client() as client:
+            resp = client.get("/widgets/config")
+    except httpx.HTTPError:
+        return None
     if resp.status_code != 200:
         return None
     return resp.json()
 
 
 def _save_config(draft: dict[str, Any]) -> tuple[int, Any]:
-    with _http_client() as client:
-        resp = client.put("/widgets/config", json=draft)
+    try:
+        with _http_client() as client:
+            resp = client.put("/widgets/config", json=draft)
+    except httpx.HTTPError:
+        return 0, "transport error"
     try:
         body = resp.json()
     except ValueError:
