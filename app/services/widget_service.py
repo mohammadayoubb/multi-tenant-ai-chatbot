@@ -1,27 +1,42 @@
 # Owner: Amer
-"""Widget token issuance service.
+"""Widget services.
 
-Public entry point: WidgetTokenService.issue_token. The service owns all
-validation, signing, logging, and tracing. The route delegates here and
-only shapes HTTP concerns.
+Two services share this module because they share a domain (widget) and an
+owner (Amer):
+
+- WidgetTokenService: POST /widgets/token. Validates origin against the
+  tenant's allowlist, mints a short-lived JWT. See feature 001.
+- WidgetConfigService: GET/PUT /widgets/config. Tenant-admin self-serve
+  editor for allowed origins, greeting, theme, enabled. See feature 004.
+
+Both services share normalize_origin so the admin save and the token endpoint
+cannot drift on what counts as a valid origin.
 
 Constitution principles enforced:
-- I (Tenant Isolation): tenant_id derived from the repository row, never input.
-- IV (Defense-in-Depth Auth): HS256 JWT with origin binding; secret from env.
+- I (Tenant Isolation): tenant_id derived from the repository row or from the
+  trusted role dep, never from a request body.
+- II (Layered Architecture): services own business logic; routes own HTTP;
+  repos own SQL.
+- IV (Defense-in-Depth Auth): HS256 JWT with origin binding for tokens; role
+  gate plus tenant scoping for admin config.
 - V (Lean Serving & Redaction): logs use hashed identifiers via widget_logging.
-- VII (Clean & Simple Code): one validation pipeline, no premature abstractions.
+- VII (Clean & Simple Code): one validation pipeline; one normalization helper
+  used by both halves; no premature abstractions.
 """
 
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Protocol
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import jwt
 
 from app.domain.widget import (
+    WidgetConfigDomain,
+    WidgetConfigUpdateRequest,
     WidgetTokenRefusalReason,
     WidgetTokenResponse,
 )
@@ -219,6 +234,23 @@ class WidgetTokenService:
         )
 
 
+def normalize_origin(raw: str) -> str:
+    """Canonical form of a tenant-supplied origin string. Used by both the
+    admin save path (feature 004) and the token endpoint (feature 001).
+
+    Lowercases scheme + host; strips default ports (80 for http, 443 for https);
+    strips path/query/fragment/userinfo. Raises ValueError on any non-http(s)
+    scheme, missing host, or malformed input.
+
+    Implemented as a wrapper around _canonicalize_origin so the admin and the
+    token endpoint cannot drift — both must accept and reject the same origins.
+    """
+    canon = _canonicalize_origin(raw)
+    if canon is None:
+        raise ValueError(f"invalid origin: {raw!r}")
+    return canon
+
+
 def _canonicalize_origin(origin: str) -> str | None:
     """Return scheme://host[:port] with lowercased host and default port stripped.
 
@@ -242,3 +274,126 @@ def _canonicalize_origin(origin: str) -> str | None:
     if port is None or port == _DEFAULT_PORTS.get(parts.scheme):
         return f"{parts.scheme}://{host}"
     return f"{parts.scheme}://{host}:{port}"
+
+
+# -----------------------------------------------------------------------------
+# Feature 004: Tenant Admin Widget Configuration
+# -----------------------------------------------------------------------------
+
+
+class AuditLogger(Protocol):
+    """Single-method Protocol matching TenantRepository.add_audit_log signature.
+
+    See specs/004-widget-admin-config/contracts/audit-log-consumption.md.
+    Hiba's TenantRepository implements this Protocol incidentally; this
+    feature's service depends on the Protocol so tests can use a fake.
+    """
+
+    async def add_audit_log(
+        self,
+        tenant_id: UUID,
+        actor_role: str,
+        action: str,
+        actor_id: str | None = None,
+        metadata: dict | None = None,
+    ) -> None: ...
+
+
+class WidgetConfigNotFound(Exception):
+    """No widget_configs row exists for the caller's tenant.
+
+    Route maps this to 403 (indistinguishable from role-missing) to prevent
+    tenant-existence enumeration (Principle I, contract clause E1/E3).
+    """
+
+
+@dataclass
+class WidgetConfigService:
+    """Tenant-admin widget configuration service.
+
+    All public methods take a trusted tenant_id derived from the role dep.
+    Origin diff + audit log calls are produced from the service layer so the
+    route stays thin (Principle II).
+    """
+
+    repo: WidgetRepository
+    audit_logger: AuditLogger
+
+    async def get_for_tenant(self, tenant_id: UUID) -> WidgetConfigDomain:
+        row = await self.repo.get_by_tenant_id(tenant_id)
+        if row is None:
+            raise WidgetConfigNotFound()
+        return row
+
+    async def update_widget_config(
+        self,
+        tenant_id: UUID,
+        request: WidgetConfigUpdateRequest,
+        actor_id: str | None,
+    ) -> WidgetConfigDomain:
+        """Apply the update + emit one audit log entry per net origin change.
+
+        Transactional behavior: the InMemoryWidgetRepository snapshot is captured
+        before the update; if any audit log call raises, the previous snapshot
+        is restored and the exception propagates. The route turns the exception
+        into a 500. (For the future SQL backend, this becomes the standard
+        async with session.begin() wrap.)
+        """
+        previous = await self.repo.get_by_tenant_id(tenant_id)
+        if previous is None:
+            raise WidgetConfigNotFound()
+
+        previous_origins: set[str] = set(previous.allowed_origins)
+        new_origins: set[str] = set(request.allowed_origins)
+        added: list[str] = sorted(new_origins - previous_origins)
+        removed: list[str] = sorted(previous_origins - new_origins)
+
+        # Snapshot for rollback (InMemory path).
+        snapshot = previous.model_copy(deep=True)
+
+        updated = await self.repo.update_by_tenant_id(
+            tenant_id,
+            allowed_origins=request.allowed_origins,
+            enabled=request.enabled,
+            theme_json=request.theme_json,
+            greeting=request.greeting,
+        )
+        if updated is None:
+            # Race: row disappeared between fetch and update. Treat as not-found.
+            raise WidgetConfigNotFound()
+
+        try:
+            for origin in added:
+                await self.audit_logger.add_audit_log(
+                    tenant_id=tenant_id,
+                    actor_role="tenant_admin",
+                    action="widget.origin_added",
+                    actor_id=actor_id,
+                    metadata={
+                        "origin": origin,
+                        "widget_id": str(updated.widget_id),
+                    },
+                )
+            for origin in removed:
+                await self.audit_logger.add_audit_log(
+                    tenant_id=tenant_id,
+                    actor_role="tenant_admin",
+                    action="widget.origin_removed",
+                    actor_id=actor_id,
+                    metadata={
+                        "origin": origin,
+                        "widget_id": str(updated.widget_id),
+                    },
+                )
+        except Exception:
+            # Roll back the InMemory write so FR-013 holds.
+            await self.repo.update_by_tenant_id(
+                tenant_id,
+                allowed_origins=snapshot.allowed_origins,
+                enabled=snapshot.enabled,
+                theme_json=snapshot.theme_json,
+                greeting=snapshot.greeting,
+            )
+            raise
+
+        return updated

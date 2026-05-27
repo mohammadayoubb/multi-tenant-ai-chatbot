@@ -6,6 +6,8 @@ Tenant admins manage CMS pages, widget settings, guardrails config, and leads he
 
 import streamlit as st
 
+from admin import widget_page
+
 st.set_page_config(page_title="Concierge Admin", layout="wide")
 
 st.title("Concierge Admin")
@@ -15,4 +17,7 @@ st.sidebar.header("Navigation")
 page = st.sidebar.radio("Go to", ["CMS", "Widget", "Guardrails", "Leads"])
 
 st.subheader(page)
-st.info("Placeholder admin page. Connect this UI to the FastAPI backend.")
+if page == "Widget":
+    widget_page.render()
+else:
+    st.info("Placeholder admin page. Connect this UI to the FastAPI backend.")

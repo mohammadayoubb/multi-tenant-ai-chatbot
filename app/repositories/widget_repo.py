@@ -25,7 +25,32 @@ class WidgetRepository(Protocol):
         """Return the widget configuration row joined with the owning tenant's status.
 
         Returns None if no row matches. Does not take a tenant_id argument —
-        see module docstring and data-model.md §1.
+        see module docstring and feature-001 data-model.md §1.
+        """
+        ...
+
+    async def get_by_tenant_id(self, tenant_id: UUID) -> WidgetConfigDomain | None:
+        """Return the widget configuration row for the given tenant.
+
+        Tenant-scoped read for the admin config endpoint (feature 004).
+        Returns None if no row matches the tenant. Implementations MUST scope
+        their query by tenant_id (Principle I).
+        """
+        ...
+
+    async def update_by_tenant_id(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_origins: list[str],
+        enabled: bool,
+        theme_json: dict | None,
+        greeting: str | None,
+    ) -> WidgetConfigDomain | None:
+        """Update the widget configuration row for the given tenant and return it.
+
+        Returns None if no row exists for the tenant. Implementations MUST scope
+        their UPDATE by tenant_id in the WHERE clause (Principle I).
         """
         ...
 
@@ -49,11 +74,42 @@ class InMemoryWidgetRepository:
                 ],
                 enabled=True,
                 tenant_status="active",
+                theme_json=None,
+                greeting=None,
             ),
         }
 
     async def get_by_widget_id(self, widget_id: UUID) -> WidgetConfigDomain | None:
         return self._rows.get(widget_id)
+
+    async def get_by_tenant_id(self, tenant_id: UUID) -> WidgetConfigDomain | None:
+        for row in self._rows.values():
+            if row.tenant_id == tenant_id:
+                return row
+        return None
+
+    async def update_by_tenant_id(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_origins: list[str],
+        enabled: bool,
+        theme_json: dict | None,
+        greeting: str | None,
+    ) -> WidgetConfigDomain | None:
+        existing = await self.get_by_tenant_id(tenant_id)
+        if existing is None:
+            return None
+        updated = existing.model_copy(
+            update={
+                "allowed_origins": list(allowed_origins),
+                "enabled": enabled,
+                "theme_json": theme_json,
+                "greeting": greeting,
+            }
+        )
+        self._rows[existing.widget_id] = updated
+        return updated
 
     # Test affordances. Not part of the WidgetRepository Protocol.
     def upsert(self, row: WidgetConfigDomain) -> None:
