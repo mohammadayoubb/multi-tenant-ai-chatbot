@@ -44,3 +44,13 @@ Decision: Amer builds Phase-7 widget work in parallel with the team's Phase 0/1/
 Consequences: This DECISIONS.md entry IS the explicit team agreement required by constitution §Development Workflow ("Work outside the current phase MUST require explicit team agreement before being merged"). Reviewers reading only the constitution will see Principle VI cited here and not flag the work as a violation. If a teammate believes the parallel-track interpretation is wrong, this is the place to challenge it.
 
 References: constitution §Core Principles VI; specs/001-widget-token-exchange/plan.md Complexity Tracking row 1; PROJECT_PLAN.md Wednesday slot.
+
+## Decision 6 — Widget loader stays hand-authored, not bundled (Amer, 2026-05-27)
+
+Context: Feature 003 production-hardens [frontend/widget/public/widget.js](frontend/widget/public/widget.js) and adds [frontend/widget/vite.config.ts](frontend/widget/vite.config.ts). Two implementation paths were available: (a) keep the loader hand-authored at ES2019 syntax and let Vite's `public/` mechanism copy it verbatim, or (b) route the loader through a Vite library build with `target: 'es2019'` and `format: 'iife'`.
+
+Decision: Keep the loader hand-authored. The new `vite.config.ts` sets `build.target: 'es2019'` for the React iframe app only. The loader ships byte-identical to its source: `dist/widget.js` SHA-256 equals `public/widget.js` SHA-256 after every build.
+
+Consequences: PR diffs touch the actual shipping artifact, not bundler output — reviewers (especially for widget auth surface, which is constitution-risky) read what tenants execute. A vitest case enforces the ES2019 baseline by scanning the source for forbidden post-ES2019 syntax tokens and any `import` statements, so a developer reflexively typing `?.` or `await` at top level fails CI. The contract entity that mediates this — Vite's `public/` passthrough — is a documented Vite feature, not custom plumbing.
+
+References: specs/003-widget-loader-hardening/research.md §R1, §R2, §R3; specs/003-widget-loader-hardening/contracts/widget-loader.md §C8.
