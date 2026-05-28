@@ -6,10 +6,21 @@ Every tenant-owned table must include tenant_id.
 
 from __future__ import annotations
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -87,8 +98,8 @@ class Lead(Base):
         index=True,
         nullable=False,
     )
-    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    contact: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    contact: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     intent: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -146,10 +157,14 @@ class AuditLog(Base):
         index=True,
         nullable=False,
     )
-    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    actor_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     actor_role: Mapped[str] = mapped_column(String(50), nullable=False)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        default=dict,
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
@@ -184,7 +199,7 @@ class TenantUsage(Base):
         Numeric(12, 6, asdecimal=False),
         nullable=False,
     )
-    trace_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
@@ -245,9 +260,13 @@ class ErasureJob(Base):
     )
     requested_by: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
-    deleted_counts_json: Mapped[dict[str, int]] = mapped_column(JSON, default=dict, nullable=False)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_counts_json: Mapped[dict[str, int]] = mapped_column(
+        JSON,
+        default=dict,
+        nullable=False,
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
