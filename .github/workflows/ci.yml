@@ -277,6 +277,13 @@ jobs:
           pip install uv
           uv pip install --system -e ".[dev]"
 
+      - name: Seed .env from .env.example
+        # api / admin / modelserver / guardrails declare `env_file: .env` in
+        # docker-compose.yml; recent Compose versions error on missing env
+        # files, so the stack must have a .env before `up`. This mirrors
+        # RUNBOOK.md step 1 and the local Demo Flow.
+        run: cp .env.example .env
+
       - name: Bring stack up
         run: docker compose up -d --wait
 
