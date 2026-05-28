@@ -49,6 +49,14 @@ Decision: The initial Hiba migration enables and forces RLS on tenant-owned tabl
 
 Consequences: Tenant-owned reads and writes require the server to set tenant context before queries, giving the database a second isolation boundary.
 
+## Decision 7 — Resolve Application Secrets From Vault
+
+Context: `.env` files must not carry database passwords, signing keys, service credentials, or other application secrets.
+
+Decision: Keep only Vault bootstrap settings in environment configuration, and load application connection strings and signing keys from Vault at runtime.
+
+Consequences: Local and deployed environments must provision Vault before starting app components, and Ayoub must review Vault/security changes before merge.
+
 
 ## Owner C — Classifier, Modelserver, Guardrails, and Service Security
 

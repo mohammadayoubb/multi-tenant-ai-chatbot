@@ -42,6 +42,18 @@ class TenantService:
             actor_id="system",
         )
 
+    async def get_tenant(
+        self,
+        tenant_id: UUID,
+        actor_role: PlatformRole | str,
+    ) -> TenantDomain:
+        """Return tenant metadata for Tenant Manager workflows."""
+        self._require_tenant_manager(actor_role)
+        tenant = await self._repo.get_by_id(tenant_id)
+        if tenant is None:
+            raise TenantNotFoundError(f"Tenant {tenant_id} was not found")
+        return TenantDomain.model_validate(tenant)
+
     async def provision_tenant(
         self,
         name: str,
