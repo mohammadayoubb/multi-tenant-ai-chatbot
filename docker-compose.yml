@@ -7,13 +7,6 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     env_file: .env
-    environment:
-      MODEL_SERVER_URL: ${MODEL_SERVER_URL:-http://modelserver:8010}
-      GUARDRAILS_URL: ${GUARDRAILS_URL:-http://guardrails:8020}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      MODELSERVER_SERVICE_TOKEN: ${MODELSERVER_SERVICE_TOKEN:-local-modelserver-token}
-      GUARDRAILS_SERVICE_TOKEN: ${GUARDRAILS_SERVICE_TOKEN:-local-guardrails-token}
-      SESSION_MEMORY_TTL_SECONDS: ${SESSION_MEMORY_TTL_SECONDS:-1800}
     depends_on:
       db:
         condition: service_healthy
@@ -25,13 +18,8 @@ services:
         condition: service_healthy
       guardrails:
         condition: service_started
-    networks: [ concierge-net ]
-        condition: service_healthy
     networks: [concierge-net]
     healthcheck:
-      # /openapi.json is the FastAPI default and a 200 here proves the route
-      # stack is wired (stronger than a hand-rolled /health). Uses python
-      # because the slim base image has no curl. See specs/007/research.md R4.
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=2)\" || exit 1"]
       interval: 5s
       timeout: 5s
@@ -46,8 +34,6 @@ services:
       - "${ADMIN_PORT:-8501}:8501"
     env_file: .env
     depends_on:
-      - api
-    networks: [ concierge-net ]
       api:
         condition: service_healthy
     networks: [concierge-net]
@@ -59,9 +45,6 @@ services:
     ports:
       - "${MODEL_SERVER_PORT:-8010}:8010"
     env_file: .env
-    environment:
-      MODELSERVER_SERVICE_TOKEN: ${MODELSERVER_SERVICE_TOKEN:-local-modelserver-token}
-    networks: [ concierge-net ]
     networks: [concierge-net]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8010/openapi.json', timeout=2)\" || exit 1"]
@@ -77,9 +60,6 @@ services:
     ports:
       - "${GUARDRAILS_PORT:-8020}:8020"
     env_file: .env
-    environment:
-      GUARDRAILS_SERVICE_TOKEN: ${GUARDRAILS_SERVICE_TOKEN:-local-guardrails-token}
-    networks: [ concierge-net ]
     networks: [concierge-net]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8020/openapi.json', timeout=2)\" || exit 1"]
@@ -93,7 +73,7 @@ services:
       context: ./frontend/widget
     ports:
       - "${WIDGET_PORT:-5173}:5173"
-    networks: [ concierge-net ]
+    networks: [concierge-net]
 
   db:
     image: pgvector/pgvector:pg16
@@ -105,9 +85,9 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks: [ concierge-net ]
+    networks: [concierge-net]
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d concierge" ]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d concierge"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -116,7 +96,6 @@ services:
     image: redis:7-alpine
     ports:
       - "${REDIS_PORT:-6379}:6379"
-    networks: [ concierge-net ]
     networks: [concierge-net]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
@@ -136,24 +115,21 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     volumes:
       - minio_data:/data
-    networks: [ concierge-net ]
+    networks: [concierge-net]
 
   vault:
     image: hashicorp/vault:1.16
     ports:
       - "8200:8200"
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_ROOT_TOKEN:-root}
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-root}
       VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-      # Tell the in-container `vault` CLI (used by the healthcheck) to talk to
-      # the dev server over HTTP. Without this it defaults to https://127.0.0.1:8200
-      # and the healthcheck fails even though the server is up.
       VAULT_ADDR: "http://0.0.0.0:8200"
     cap_add:
       - IPC_LOCK
-    networks: [ concierge-net ]
+    networks: [concierge-net]
     healthcheck:
-      test: [ "CMD", "vault", "status" ]
+      test: ["CMD", "vault", "status"]
       interval: 5s
       retries: 10
 
