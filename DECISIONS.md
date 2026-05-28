@@ -262,3 +262,113 @@ We added a redaction utility to remove sensitive data before text is stored in l
 
 **Impact:**  
 Visitor-provided secrets and PII are less likely to leak through traces, debugging output, or memory.
+
+## Owner B — Router, Agent, RAG, Tools, and Memory
+
+### Decision: hybrid router + bounded agent
+
+We use a hybrid message handling design instead of sending every visitor message directly to an LLM agent.
+
+The first step is a classifier-driven router. High-confidence, enumerable cases are handled by deterministic workflow paths:
+
+- `spam` → blocked
+- `faq` → `rag_search`
+- `sales_or_contact` → `capture_lead`
+- `human_request` → `escalate`
+- `ambiguous` or low-confidence → bounded agent
+
+This keeps common traffic cheaper, faster, and more predictable. The agent is reserved for ambiguous or multi-step turns where tool sequencing is useful.
+
+### Why not agent-only?
+
+An agent-only design would be more expensive and less predictable. It would spend LLM/tool-calling budget on simple cases such as FAQs, clear lead-capture requests, and explicit human handoff requests.
+
+The hybrid design gives us a safer production pattern:
+
+- simple cases stay on cheap workflow routes
+- uncertain cases fail safe to the agent
+- the agent remains bounded by tool allowlist, iteration count, and token budget
+
+### Agent constraints
+
+The bounded agent can use only three tools:
+
+- `rag_search`
+- `capture_lead`
+- `escalate`
+
+The agent has:
+
+- max tool iterations: 5
+- max token budget per turn: 4000
+- strict tool allowlist
+- tenant ID passed only from trusted backend context
+
+The visitor and LLM never choose `tenant_id`.
+
+### RAG isolation decision
+
+RAG retrieval is tenant-filtered. Every CMS page or future vector chunk must carry `tenant_id`, and retrieval must filter by it.
+
+Current retriever rule:
+
+```python
+CmsPage.tenant_id == tenant_id
+
+Current RAG fallback
+
+Until hosted embeddings and pgvector storage are fully wired, the retriever uses tenant-scoped CMS rows and deterministic lexical scoring.
+
+This gives us a real, testable chat path without cross-tenant leakage. The fallback is not the final retrieval strategy, but it preserves the most important contract: tenant-scoped retrieval.
+
+Memory decision
+
+Short-term memory is stored in Redis with the key format:
+
+session:{tenant_id}:{session_id}
+
+The memory TTL is configurable through:
+
+SESSION_MEMORY_TTL_SECONDS
+
+Default TTL:
+
+1800 seconds
+
+This gives the concierge enough context for a browsing session while avoiding permanent storage of anonymous visitor conversations.
+
+Messages are redacted before being stored in memory.
+
+Section B evals
+
+Owner B includes two committed golden sets:
+
+agent/tool-selection golden set
+RAG retrieval golden set
+
+The tool-selection eval checks whether visitor messages route to the expected path: RAG, lead capture, escalation, blocking, or agent handoff.
+
+The RAG eval checks expected source selection and includes a tenant-isolation case.
+
+The report script is:
+
+python evals\section_b_report.py
+
+## After adding it
+
+Run:
+
+```cmd
+python -m pytest -q
+
+Then run:
+
+python evals\section_b_report.py
+
+Expected report:
+
+Section B Eval Report
+Agent/tool selection: 10/10 passed
+RAG retrieval:        5/5 passed
+
+Status: PASS

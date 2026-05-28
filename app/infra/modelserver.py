@@ -13,7 +13,7 @@ Important:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 import httpx
 
@@ -25,6 +25,14 @@ RouterLabel = Literal[
     "human_request",
     "ambiguous",
 ]
+
+ALLOWED_ROUTER_LABELS: set[str] = {
+    "spam",
+    "faq",
+    "sales_or_contact",
+    "human_request",
+    "ambiguous",
+}
 
 
 @dataclass(frozen=True)
@@ -79,11 +87,17 @@ class ModelserverClient:
                 f"Modelserver returned status {response.status_code}."
             )
 
-        data = response.json()
+        try:
+            data = response.json()
+            raw_label = str(data["label"])
+            if raw_label not in ALLOWED_ROUTER_LABELS:
+                raise ValueError(f"Unsupported router label: {raw_label}")
 
-        return ModelserverPrediction(
-            label=data["label"],
-            confidence=float(data["confidence"]),
-            model_version=data["model_version"],
-            latency_ms=float(data["latency_ms"]),
-        )
+            return ModelserverPrediction(
+                label=cast(RouterLabel, raw_label),
+                confidence=float(data.get("confidence", 0.0)),
+                model_version=str(data.get("model_version", "unknown")),
+                latency_ms=float(data.get("latency_ms", 0.0)),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ModelserverClientError("Invalid modelserver prediction payload.") from error

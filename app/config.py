@@ -34,6 +34,8 @@ class AppSecrets(BaseModel):
     minio_endpoint: str
     model_server_url: str
     guardrails_url: str
+    modelserver_service_token: SecretStr = SecretStr("")
+    guardrails_service_token: SecretStr = SecretStr("")
     widget_token_signing_key: SecretStr
     widget_token_ttl_seconds: int = 900
     session_memory_ttl_seconds: int = 1800
@@ -42,6 +44,7 @@ class AppSecrets(BaseModel):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached Vault bootstrap settings."""
+
     settings_cls = cast(Any, Settings)
     return cast(Settings, settings_cls())
 
@@ -49,6 +52,7 @@ def get_settings() -> Settings:
 @lru_cache(maxsize=1)
 def get_app_secrets() -> AppSecrets:
     """Load application settings from Vault."""
+
     settings = get_settings()
     vault = VaultClient(
         addr=settings.vault_addr,

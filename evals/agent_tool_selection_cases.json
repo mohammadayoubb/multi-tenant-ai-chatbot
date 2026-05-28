@@ -1,0 +1,93 @@
+[
+    {
+        "id": "tool-001",
+        "message": "What services do you offer?",
+        "expected_route": "rag_search",
+        "expected_tools": [
+            "rag_search"
+        ],
+        "reason": "Clear FAQ-style question should use tenant RAG."
+    },
+    {
+        "id": "tool-002",
+        "message": "Can I speak to a human representative?",
+        "expected_route": "escalate",
+        "expected_tools": [
+            "escalate"
+        ],
+        "reason": "Explicit human handoff request should escalate."
+    },
+    {
+        "id": "tool-003",
+        "message": "Please contact me about pricing. My email is buyer@example.com",
+        "expected_route": "capture_lead",
+        "expected_tools": [
+            "capture_lead"
+        ],
+        "reason": "Sales/contact intent with email should capture a lead."
+    },
+    {
+        "id": "tool-004",
+        "message": "What are your pricing options and can someone email me?",
+        "expected_route": "agent",
+        "expected_tools": [
+            "rag_search",
+            "capture_lead"
+        ],
+        "reason": "Mixed information request and lead intent should go through the agent with two tools."
+    },
+    {
+        "id": "tool-005",
+        "message": "Buy now free money crypto giveaway",
+        "expected_route": "blocked",
+        "expected_tools": [],
+        "reason": "Spam-like message should be blocked."
+    },
+    {
+        "id": "tool-006",
+        "message": "I am not sure which plan fits me and I also want a demo",
+        "expected_route": "agent",
+        "expected_tools": [
+            "rag_search",
+            "capture_lead"
+        ],
+        "reason": "Ambiguous multi-step sales request should reach the agent."
+    },
+    {
+        "id": "tool-007",
+        "message": "Where are you located?",
+        "expected_route": "rag_search",
+        "expected_tools": [
+            "rag_search"
+        ],
+        "reason": "Business information question should use RAG."
+    },
+    {
+        "id": "tool-008",
+        "message": "Can your team call me tomorrow at +961 70 123 456?",
+        "expected_route": "capture_lead",
+        "expected_tools": [
+            "capture_lead"
+        ],
+        "reason": "Contact/follow-up intent with phone number should capture a lead."
+    },
+    {
+        "id": "tool-009",
+        "message": "This is complicated, I want to talk to someone from support team",
+        "expected_route": "escalate",
+        "expected_tools": [
+            "escalate"
+        ],
+        "reason": "Explicit support team request should escalate."
+    },
+    {
+        "id": "tool-010",
+        "message": "What is included in your service and can I book a meeting?",
+        "expected_route": "agent",
+        "expected_tools": [
+            "rag_search",
+            "capture_lead"
+        ],
+        "reason": "Knowledge request plus meeting intent should use multiple tools."
+    }
+]

@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir uv
 # declared in pyproject.toml's [tool.setuptools].packages.
 COPY pyproject.toml ./
 COPY app ./app
+RUN uv pip install --system -e ".[dev]"
 COPY modelserver ./modelserver
 COPY guardrails ./guardrails
 COPY admin ./admin

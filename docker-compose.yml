@@ -17,12 +17,9 @@ services:
       modelserver:
         condition: service_healthy
       guardrails:
-        condition: service_healthy
+        condition: service_started
     networks: [concierge-net]
     healthcheck:
-      # /openapi.json is the FastAPI default and a 200 here proves the route
-      # stack is wired (stronger than a hand-rolled /health). Uses python
-      # because the slim base image has no curl. See specs/007/research.md R4.
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=2)\" || exit 1"]
       interval: 5s
       timeout: 5s
@@ -125,11 +122,8 @@ services:
     ports:
       - "8200:8200"
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_ROOT_TOKEN:-root}
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-root}
       VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-      # Tell the in-container `vault` CLI (used by the healthcheck) to talk to
-      # the dev server over HTTP. Without this it defaults to https://127.0.0.1:8200
-      # and the healthcheck fails even though the server is up.
       VAULT_ADDR: "http://0.0.0.0:8200"
     cap_add:
       - IPC_LOCK
