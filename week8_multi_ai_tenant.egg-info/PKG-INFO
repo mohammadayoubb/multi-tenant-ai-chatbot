@@ -1,0 +1,33 @@
+Metadata-Version: 2.4
+Name: week8-multi-ai-tenant
+Version: 0.1.0
+Summary: Multi-tenant AI SaaS concierge platform
+Requires-Python: >=3.11
+Requires-Dist: fastapi
+Requires-Dist: uvicorn[standard]
+Requires-Dist: pydantic
+Requires-Dist: pydantic-settings
+Requires-Dist: sqlalchemy[asyncio]
+Requires-Dist: asyncpg
+Requires-Dist: alembic
+Requires-Dist: psycopg2-binary
+Requires-Dist: fastapi-users[sqlalchemy]
+Requires-Dist: redis
+Requires-Dist: rq
+Requires-Dist: miniopy-async
+Requires-Dist: hvac
+Requires-Dist: structlog
+Requires-Dist: httpx
+Requires-Dist: pyjwt
+Requires-Dist: python-multipart
+Requires-Dist: scikit-learn
+Requires-Dist: joblib
+Requires-Dist: onnxruntime
+Requires-Dist: numpy
+Requires-Dist: streamlit
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-asyncio; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: types-redis; extra == "dev"

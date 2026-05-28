@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+admin/__init__.py
+admin/streamlit_app.py
+app/__init__.py
+app/config.py
+app/main.py
+guardrails/__init__.py
+guardrails/main.py
+modelserver/__init__.py
+modelserver/main.py
+week8_multi_ai_tenant.egg-info/PKG-INFO
+week8_multi_ai_tenant.egg-info/SOURCES.txt
+week8_multi_ai_tenant.egg-info/dependency_links.txt
+week8_multi_ai_tenant.egg-info/requires.txt
+week8_multi_ai_tenant.egg-info/top_level.txt
