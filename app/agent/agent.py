@@ -293,8 +293,33 @@ def _needs_lead_capture(lowered_message: str) -> bool:
 def _needs_knowledge_lookup(lowered_message: str) -> bool:
     """Detect whether the visitor is asking for tenant knowledge."""
 
-    question_terms = ("what", "how", "when", "where", "why", "do you", "can you", "?")
-    return any(term in lowered_message for term in question_terms)
+    question_terms = (
+        "what",
+        "how",
+        "when",
+        "where",
+        "why",
+        "which",
+        "do you",
+        "can you",
+        "?",
+    )
+    knowledge_terms = (
+        "plan",
+        "service",
+        "services",
+        "offer",
+        "offers",
+        "include",
+        "included",
+        "pricing options",
+        "location",
+        "located",
+    )
+
+    return any(term in lowered_message for term in question_terms) or any(
+        term in lowered_message for term in knowledge_terms
+    )
 
 
 def _rough_token_count(text: str) -> int:

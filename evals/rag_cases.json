@@ -1,0 +1,100 @@
+[
+    {
+        "id": "rag-001",
+        "tenant_id": 1,
+        "pages": [
+            {
+                "page_id": 101,
+                "title": "Services",
+                "body": "Acme Clinic offers dental cleaning, braces consultation, emergency dental care, and whitening services."
+            }
+        ],
+        "query": "Do you offer dental cleaning?",
+        "expected_source_title": "Services",
+        "expected_terms": [
+            "dental",
+            "cleaning"
+        ],
+        "reason": "Retriever should return the tenant page that contains dental cleaning."
+    },
+    {
+        "id": "rag-002",
+        "tenant_id": 1,
+        "pages": [
+            {
+                "page_id": 102,
+                "title": "Opening Hours",
+                "body": "Acme Clinic is open Monday to Friday from 9 AM to 6 PM and Saturday from 10 AM to 2 PM."
+            }
+        ],
+        "query": "When are you open on Saturday?",
+        "expected_source_title": "Opening Hours",
+        "expected_terms": [
+            "saturday",
+            "10",
+            "2"
+        ],
+        "reason": "Retriever should find the hours page for Saturday opening time."
+    },
+    {
+        "id": "rag-003",
+        "tenant_id": 2,
+        "pages": [
+            {
+                "page_id": 201,
+                "title": "Pricing",
+                "body": "Beta Gym memberships start at 40 dollars per month. Personal training packages are available."
+            }
+        ],
+        "query": "How much does membership cost?",
+        "expected_source_title": "Pricing",
+        "expected_terms": [
+            "memberships",
+            "40",
+            "month"
+        ],
+        "reason": "Retriever should find pricing content for the current tenant."
+    },
+    {
+        "id": "rag-004",
+        "tenant_id": 2,
+        "pages": [
+            {
+                "page_id": 202,
+                "title": "Location",
+                "body": "Beta Gym is located near the central train station, next to the public library."
+            }
+        ],
+        "query": "Where are you located?",
+        "expected_source_title": "Location",
+        "expected_terms": [
+            "located",
+            "station",
+            "library"
+        ],
+        "reason": "Retriever should find tenant location content."
+    },
+    {
+        "id": "rag-005",
+        "tenant_id": 1,
+        "pages": [
+            {
+                "page_id": 103,
+                "title": "Tenant One Policy",
+                "body": "Tenant One allows appointment cancellation up to 24 hours before the scheduled visit."
+            },
+            {
+                "page_id": 203,
+                "title": "Tenant Two Policy",
+                "body": "Tenant Two allows cancellation only up to 48 hours before the scheduled visit."
+            }
+        ],
+        "query": "What is the cancellation policy?",
+        "expected_source_title": "Tenant One Policy",
+        "expected_terms": [
+            "24",
+            "hours"
+        ],
+        "reason": "Retriever should return only the current tenant policy, not another tenant's policy."
+    }
+]
