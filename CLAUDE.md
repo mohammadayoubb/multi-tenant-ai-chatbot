@@ -259,3 +259,27 @@ Do not build ahead of the requested phase.
 | 9 | Right to erasure | Hiba |
 | 10 | CI/CD and eval gates | Amer |
 | 11 | Documentation | All |
+
+---
+
+<!-- SPECKIT START -->
+## Active Spec-Kit Feature
+
+For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/008-demo-polish/plan.md](specs/008-demo-polish/plan.md).
+
+Related artifacts:
+- [specs/008-demo-polish/spec.md](specs/008-demo-polish/spec.md)
+- [specs/008-demo-polish/research.md](specs/008-demo-polish/research.md)
+- [specs/008-demo-polish/data-model.md](specs/008-demo-polish/data-model.md)
+- [specs/008-demo-polish/contracts/](specs/008-demo-polish/contracts/)
+- [specs/008-demo-polish/quickstart.md](specs/008-demo-polish/quickstart.md)
+
+Prior features (shipped):
+- [specs/001-widget-token-exchange/](specs/001-widget-token-exchange/)
+- [specs/002-widget-chat-ui/](specs/002-widget-chat-ui/)
+- [specs/003-widget-loader-hardening/](specs/003-widget-loader-hardening/)
+- [specs/004-widget-admin-config/](specs/004-widget-admin-config/)
+- [specs/005-admin-read-only-pages/](specs/005-admin-read-only-pages/)
+- [specs/006-ci-eval-gates/](specs/006-ci-eval-gates/)
+- [specs/007-cross-tenant-smoke-e2e/](specs/007-cross-tenant-smoke-e2e/)
+<!-- SPECKIT END -->

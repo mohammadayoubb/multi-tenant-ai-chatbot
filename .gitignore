@@ -4,9 +4,13 @@
 !.env.example
 
 # Claude Code machine-local state (.claude/skills/ is committed for the team)
+.claude/settings.json
 .claude/settings.local.json
 .claude/.credentials*
 .claude/cache/
+
+# Amer's personal spec-kit playbook (not shared with team)
+amer-works.md
 
 .venv/
 __pycache__/
@@ -26,4 +30,9 @@ dist/
 build/
 logs/
 *.log
+
+# Smoke-runner artifact (feature 007). Written to repo root by tests/smoke/test_cross_tenant_e2e.py
+# and uploaded as a CI artifact on failure; not source of truth.
+smoke-report.json
+docker-compose.logs
 __pycache__
