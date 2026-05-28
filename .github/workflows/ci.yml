@@ -56,10 +56,29 @@ jobs:
         run: ruff check .
 
       - name: Run tests
-        run: pytest
+        # tests/smoke/ requires a live Compose stack (see specs/007); it runs
+        # in the dedicated smoke-e2e job below where the stack is brought up.
+        run: pytest --ignore=tests/smoke
 
       - name: Docker build
         run: docker compose build
+
+  # Lean-image audit — enforces Constitution Principle V by asserting that
+  # the modelserver and guardrails images do not contain torch or transformers.
+  # Contract: specs/008-demo-polish/contracts/lean-image-audit-cli.md.
+  # Placed before the eval jobs so a constitutional violation short-circuits
+  # CI early; does NOT block the eval jobs (each surfaces its own status).
+  lean-image-audit:
+    needs: lint-test-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build serving images
+        run: docker compose build modelserver guardrails
+
+      - name: Audit serving images for torch/transformers
+        run: make lean-image-audit
 
   classifier-eval:
     needs: lint-test-build
@@ -257,6 +276,13 @@ jobs:
         run: |
           pip install uv
           uv pip install --system -e ".[dev]"
+
+      - name: Seed .env from .env.example
+        # api / admin / modelserver / guardrails declare `env_file: .env` in
+        # docker-compose.yml; recent Compose versions error on missing env
+        # files, so the stack must have a .env before `up`. This mirrors
+        # RUNBOOK.md step 1 and the local Demo Flow.
+        run: cp .env.example .env
 
       - name: Bring stack up
         run: docker compose up -d --wait

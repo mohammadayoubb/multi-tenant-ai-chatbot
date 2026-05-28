@@ -34,6 +34,20 @@ cp .env.example .env
 docker compose up --build
 ```
 
+## Embed the widget
+
+Drop this on any page served from an origin in your tenant's allowlist:
+
+```html
+<script
+  src="https://YOUR-CONCIERGE-HOST/widget.js"
+  data-widget-id="YOUR_WIDGET_ID"
+  data-backend-url="https://YOUR-CONCIERGE-HOST"
+></script>
+```
+
+`YOUR_WIDGET_ID` comes from the admin UI's widget configuration page for the tenant. The page that loads this snippet must be served from an origin on the tenant's allowlist — the server validates the request `Origin` against that list before issuing a session token, so a snippet on a non-allowlisted page will silently fail to start a session.
+
 ## Required Docs
 
 - `PROJECT_PLAN.md`
