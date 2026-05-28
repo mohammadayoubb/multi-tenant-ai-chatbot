@@ -40,6 +40,8 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["app*", "admin*", "guardrails*", "modelserver*"]
 exclude = ["frontend*", "tests*"]
+[tool.setuptools]
+packages = ["app", "admin", "guardrails", "modelserver"]
 
 [tool.ruff]
 line-length = 100
