@@ -61,6 +61,23 @@ jobs:
       - name: Docker build
         run: docker compose build
 
+  # Lean-image audit — enforces Constitution Principle V by asserting that
+  # the modelserver and guardrails images do not contain torch or transformers.
+  # Contract: specs/008-demo-polish/contracts/lean-image-audit-cli.md.
+  # Placed before the eval jobs so a constitutional violation short-circuits
+  # CI early; does NOT block the eval jobs (each surfaces its own status).
+  lean-image-audit:
+    needs: lint-test-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build serving images
+        run: docker compose build modelserver guardrails
+
+      - name: Audit serving images for torch/transformers
+        run: make lean-image-audit
+
   classifier-eval:
     needs: lint-test-build
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
