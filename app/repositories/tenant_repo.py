@@ -44,6 +44,11 @@ class TenantRepository:
         result = await self._session.execute(select(Tenant).where(Tenant.id == tenant_id))
         return result.scalar_one_or_none()
 
+    async def get_by_name(self, name: str) -> Tenant | None:
+        """Fetch tenant by unique name."""
+        result = await self._session.execute(select(Tenant).where(Tenant.name == name))
+        return result.scalar_one_or_none()
+
     async def set_status(self, tenant_id: UUID, status: str) -> Tenant | None:
         """Update one tenant's lifecycle status."""
         tenant = await self.get_by_id(tenant_id)
@@ -117,6 +122,36 @@ class TenantRepository:
                 )
             )
         return result.scalar_one_or_none()
+
+    async def upsert_rate_limit(
+        self,
+        tenant_id: UUID,
+        action: str,
+        limit_count: int,
+        window_seconds: int,
+    ) -> TenantRateLimit:
+        """Create or update one tenant-scoped rate-limit configuration."""
+        async with self._tenant_context(tenant_id):
+            result = await self._session.execute(
+                select(TenantRateLimit).where(
+                    TenantRateLimit.tenant_id == tenant_id,
+                    TenantRateLimit.action == action,
+                )
+            )
+            rate_limit = result.scalar_one_or_none()
+            if rate_limit is None:
+                rate_limit = TenantRateLimit(
+                    tenant_id=tenant_id,
+                    action=action,
+                    limit_count=limit_count,
+                    window_seconds=window_seconds,
+                )
+                self._session.add(rate_limit)
+            else:
+                rate_limit.limit_count = limit_count
+                rate_limit.window_seconds = window_seconds
+            await self._session.flush()
+        return rate_limit
 
     async def count_usage_since(self, tenant_id: UUID, action: str, window_start: datetime) -> int:
         """Count tenant usage units for an action since a window start."""
