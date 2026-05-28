@@ -4,6 +4,8 @@
 The same CMS content powers the public site and the agent knowledge base.
 """
 
+from uuid import UUID
+
 from app.domain.cms import CmsPageDomain
 from app.repositories.cms_repo import CmsRepository
 
@@ -14,7 +16,7 @@ class CmsService:
     def __init__(self, repo: CmsRepository) -> None:
         self._repo = repo
 
-    async def list_pages(self, tenant_id: int) -> list[CmsPageDomain]:
+    async def list_pages(self, tenant_id: UUID) -> list[CmsPageDomain]:
         """List tenant CMS pages."""
         pages = await self._repo.list_pages(tenant_id)
         return [CmsPageDomain.model_validate(page) for page in pages]
