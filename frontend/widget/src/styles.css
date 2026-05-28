@@ -1,24 +1,499 @@
-// Owner: Amer
+/* Owner: Amer */
+/*
+ * Concierge widget styles. Lives in a 320x420+ iframe; layout assumes that
+ * narrow viewport. Visual language: rounded surfaces, indigo accent
+ * (#4f46e5), slate neutrals, system font stack. No external font/icon
+ * dependencies — everything renders from CSS + inline SVG.
+ */
+
+:root {
+  --c-bg: #ffffff;
+  --c-surface: #ffffff;
+  --c-surface-alt: #f8fafc;
+  --c-border: #e2e8f0;
+  --c-border-strong: #cbd5e1;
+  --c-text: #0f172a;
+  --c-text-muted: #64748b;
+  --c-text-soft: #94a3b8;
+  --c-brand: #4f46e5;
+  --c-brand-hover: #4338ca;
+  --c-brand-soft: #eef2ff;
+  --c-success: #10b981;
+  --c-warn: #f59e0b;
+  --c-warn-bg: #fef3c7;
+  --c-warn-text: #78350f;
+  --c-danger: #dc2626;
+  --c-danger-bg: #fee2e2;
+  --c-danger-text: #7f1d1d;
+  --c-ticket-bg: #fef3c7;
+  --c-ticket-text: #92400e;
+  --c-ticket-border: #fcd34d;
+  --c-assistant-bg: #f1f5f9;
+  --c-assistant-text: #0f172a;
+  --c-user-bg-from: #6366f1;
+  --c-user-bg-to: #4f46e5;
+  --c-user-text: #ffffff;
+  --c-focus-ring: rgba(79, 70, 229, 0.35);
+  --shadow-card: 0 12px 32px -8px rgba(15, 23, 42, 0.18),
+    0 2px 6px -2px rgba(15, 23, 42, 0.08);
+  --radius-shell: 16px;
+  --radius-bubble: 16px;
+  --radius-input: 12px;
+  --radius-btn: 10px;
+  --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  font-family: var(--font-stack);
+  color: var(--c-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Hide outer (iframe/body) scrollbars; the shell is fixed-size. */
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+ * Shell
+ * ------------------------------------------------------------------------- */
+
 .widget-shell {
-  width: 320px;
-  min-height: 420px;
-  border: 1px solid #ddd;
-  border-radius: 0.6rem;
+  width: 360px;
+  height: 540px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-shell);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.45;
+  position: relative;
+}
+
+/* Loading / unavailable shells get their own minimal layout. */
+.widget-shell > p {
+  margin: auto;
+  padding: 1.25rem;
+  color: var(--c-text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------------------
+ * Header bar
+ * ------------------------------------------------------------------------- */
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: #fff;
+  flex: 0 0 auto;
+}
+
+.chat-header__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+
+.chat-header__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.chat-header__title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.005em;
+}
+
+.chat-header__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.chat-header__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.25);
+}
+
+/* ---------------------------------------------------------------------------
+ * Chat pane
+ * ------------------------------------------------------------------------- */
+
+.chat-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--c-surface);
+}
+
+/* The list region: a position wrapper so we can layer fade-mask gradients
+ * over the scrollable interior without the gradients themselves scrolling. */
+.message-list {
+  flex: 1 1 auto;
+  position: relative;
+  overflow-y: auto;
   padding: 1rem;
-  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  scroll-behavior: smooth;
+  background: var(--c-surface-alt);
+  /* Invisible scrollbar — scrolling still works via wheel/trackpad/touch. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+  /* Soft fade at the top + bottom edges so content reads as "continues
+   * beyond" instead of "cut off." Mask leaves the middle fully opaque and
+   * fades 18 px at each end. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 18px,
+    #000 calc(100% - 18px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 18px,
+    #000 calc(100% - 18px),
+    transparent 100%
+  );
 }
 
-input {
-  width: 100%;
-  padding: 0.7rem;
-  border-radius: 0.6rem;
-  border: 1px solid #ccc;
+.message-list::-webkit-scrollbar {
+  /* Chrome/Safari/Edge: zero-width track means no visible scrollbar. */
+  width: 0;
+  height: 0;
 }
 
-button {
-  margin-top: 0.7rem;
-  padding: 0.7rem 1rem;
-  border-radius: 0.6rem;
+/* ---------------------------------------------------------------------------
+ * Empty state
+ * ------------------------------------------------------------------------- */
+
+.empty-state {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  padding: 1.5rem 0.5rem;
+  color: var(--c-text-muted);
+}
+
+.empty-state__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--c-brand-soft);
+  color: var(--c-brand);
+  display: grid;
+  place-items: center;
+}
+
+.empty-state__title {
+  color: var(--c-text);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.empty-state__sub {
+  font-size: 0.82rem;
+  max-width: 240px;
+  line-height: 1.4;
+}
+
+/* ---------------------------------------------------------------------------
+ * Message bubbles
+ * ------------------------------------------------------------------------- */
+
+.message-bubble {
+  max-width: 82%;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--radius-bubble);
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.45;
+  animation: bubble-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.04);
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-bubble--user {
+  align-self: flex-end;
+  background: linear-gradient(
+    135deg,
+    var(--c-user-bg-from) 0%,
+    var(--c-user-bg-to) 100%
+  );
+  color: var(--c-user-text);
+  border-bottom-right-radius: 6px;
+}
+
+.message-bubble--assistant {
+  align-self: flex-start;
+  background: var(--c-assistant-bg);
+  color: var(--c-assistant-text);
+  border-bottom-left-radius: 6px;
+}
+
+/* Typing indicator: three dots that bounce. */
+.message-loading {
+  align-self: flex-start;
+  background: var(--c-assistant-bg);
+  color: var(--c-text-muted);
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-bubble);
+  border-bottom-left-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0;
+  line-height: 0;
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.04);
+}
+
+.message-loading::before,
+.message-loading::after,
+.message-loading > span {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-text-soft);
+  display: inline-block;
+  animation: typing-bounce 1.1s infinite ease-in-out;
+}
+
+.message-loading::before {
+  animation-delay: -0.32s;
+}
+
+.message-loading > span {
+  animation-delay: -0.16s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Ticket pill (route === "escalate")
+ * ------------------------------------------------------------------------- */
+
+.ticket-pill {
+  align-self: flex-start;
+  margin-top: 0.3rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--c-ticket-bg);
+  color: var(--c-ticket-text);
+  border: 1px solid var(--c-ticket-border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ticket-pill::before {
+  content: "🎫";
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * Status banners (error / expired)
+ * ------------------------------------------------------------------------- */
+
+.status-banner {
+  padding: 0.6rem 0.85rem;
+  margin: 0 1rem 0.5rem;
+  border-radius: var(--radius-input);
+  font-size: 0.82rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.status-banner--expired {
+  background: var(--c-danger-bg);
+  color: var(--c-danger-text);
+  border: 1px solid #fecaca;
+}
+
+.status-banner--error {
+  background: var(--c-warn-bg);
+  color: var(--c-warn-text);
+  border: 1px solid #fde68a;
+}
+
+.status-banner button {
+  margin-top: 0;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  background: var(--c-warn);
+  color: #fff;
+  border-radius: var(--radius-btn);
   border: none;
   cursor: pointer;
+  font-weight: 600;
+  transition: background 140ms ease;
 }
+
+.status-banner button:hover {
+  background: #d97706;
+}
+
+/* ---------------------------------------------------------------------------
+ * Composer (input area)
+ * ------------------------------------------------------------------------- */
+
+.chat-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem 1.1rem;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  flex: 0 0 auto;
+}
+
+.chat-input__field {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  resize: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+  outline: none;
+  /* Invisible scrollbar inside the textarea too. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-input__field::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.chat-input__field::placeholder {
+  color: var(--c-text-soft);
+}
+
+.chat-input__field:focus {
+  border-color: var(--c-brand);
+  box-shadow: 0 0 0 3px var(--c-focus-ring);
+}
+
+.chat-input__field:disabled {
+  background: var(--c-surface-alt);
+  color: var(--c-text-muted);
+  cursor: not-allowed;
+}
+
+.chat-input__send {
+  align-self: flex-end;
+  margin-top: 0;
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-btn);
+  border: none;
+  background: var(--c-brand);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 140ms ease, transform 80ms ease, box-shadow 140ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+}
+
+.chat-input__send:hover:not(:disabled) {
+  background: var(--c-brand-hover);
+}
+
+.chat-input__send:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.chat-input__send:disabled {
+  background: var(--c-border-strong);
+  color: #fff;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.chat-input__send svg {
+  width: 14px;
+  height: 14px;
+}
+

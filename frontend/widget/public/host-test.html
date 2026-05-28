@@ -1,0 +1,46 @@
+<!-- Owner: Amer -->
+<!--
+  Local sanity-check page for frontend/widget/public/widget.js.
+  Open at http://localhost:5173/host-test.html after `npm run dev` from frontend/widget/.
+  Documented in specs/003-widget-loader-hardening/quickstart.md.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Concierge widget host test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 40rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+        color: #222;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Concierge widget host test</h1>
+    <p>
+      This page simulates a tenant's site loading the production widget loader.
+      You should see the chat widget pinned to the bottom-right corner.
+    </p>
+    <p>
+      DevTools &rarr; Elements should show exactly one
+      <code>&lt;iframe data-concierge-widget-id="w_demo"&gt;</code> under
+      <code>&lt;body&gt;</code>, and the Console should be free of loader
+      errors.
+    </p>
+    <!--
+      NOTE: do NOT add `async` to this tag. `document.currentScript` is null
+      inside async classic scripts, and the loader uses currentScript to read
+      its data-* attributes. Use a plain or `defer`d script tag instead.
+    -->
+    <script
+      src="/widget.js"
+      data-widget-id="9a7e3a3a-1a8d-4f3a-9f06-2e2b9a8b1c6d"
+      data-backend-url="http://localhost:5173"
+    ></script>
+  </body>
+</html>
