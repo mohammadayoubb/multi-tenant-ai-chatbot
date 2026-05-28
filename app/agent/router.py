@@ -99,18 +99,41 @@ async def route_message(message: str) -> str:
 
 
 def _default_modelserver_client() -> ModelserverClient | None:
-    """Create the default classifier client only when a token is configured."""
+    """Create the default classifier client when config is available.
 
-    settings = get_settings()
-    service_token = getattr(settings, "modelserver_service_token", "")
+    Supports both config styles:
+    - simple env-based get_settings()
+    - Vault-based get_app_secrets(), if present later
+    """
+
+    try:
+        from app import config as app_config
+
+        if hasattr(app_config, "get_app_secrets"):
+            secrets = app_config.get_app_secrets()
+            service_token_obj = getattr(secrets, "modelserver_service_token", "")
+            service_token = (
+                service_token_obj.get_secret_value()
+                if hasattr(service_token_obj, "get_secret_value")
+                else str(service_token_obj)
+            )
+            base_url = secrets.model_server_url
+        else:
+            settings = get_settings()
+            service_token = getattr(settings, "modelserver_service_token", "")
+            base_url = settings.model_server_url
+    except Exception:
+        # Local tests/dev fallback. If Vault/env config is unavailable,
+        # router uses fallback rules instead of failing import/runtime.
+        return None
+
     if not service_token:
         return None
 
     return ModelserverClient(
-        base_url=settings.model_server_url,
+        base_url=base_url,
         service_token=service_token,
     )
-
 
 def _fallback_rule_decision(message: str) -> RouteDecision:
     """Keyword fallback used only when the modelserver cannot be used.

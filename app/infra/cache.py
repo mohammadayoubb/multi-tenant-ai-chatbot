@@ -41,12 +41,26 @@ class SessionMemory:
         ttl_seconds: int | None = None,
         max_messages: int = 12,
     ) -> None:
-        settings = get_settings()
+        try:
+            from app import config as app_config
+
+            if hasattr(app_config, "get_app_secrets"):
+                secrets = app_config.get_app_secrets()
+                redis_url = secrets.redis_url
+                default_ttl_seconds = secrets.session_memory_ttl_seconds
+            else:
+                settings = get_settings()
+                redis_url = settings.redis_url
+                default_ttl_seconds = settings.session_memory_ttl_seconds
+        except Exception:
+            redis_url = "redis://localhost:6379"
+            default_ttl_seconds = 1800
+
         self._redis = redis_client or Redis.from_url(
-            settings.redis_url,
+            redis_url,
             decode_responses=True,
         )
-        self._ttl_seconds = ttl_seconds or settings.session_memory_ttl_seconds
+        self._ttl_seconds = ttl_seconds or default_ttl_seconds
         self._max_messages = max_messages
 
     async def append_message(
@@ -70,7 +84,6 @@ class SessionMemory:
             await self._redis.ltrim(key, -self._max_messages, -1)
             await self._redis.expire(key, self._ttl_seconds)
         except RedisError:
-            # Memory must never become a hard dependency for chat availability.
             return
 
     async def get_messages(self, tenant_id: int, session_id: str) -> list[MemoryMessage]:
@@ -101,11 +114,7 @@ class SessionMemory:
 
     @staticmethod
     def key_for(tenant_id: int, session_id: str) -> str:
-        """Build the contract-required Redis memory key.
-
-        tenant_id is always included so identical session IDs from different
-        tenants cannot collide.
-        """
+        """Build the contract-required Redis memory key."""
 
         safe_session_id = _safe_key_part(session_id)
         return f"session:{tenant_id}:{safe_session_id}"

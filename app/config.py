@@ -19,16 +19,6 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = Field(default="postgresql+asyncpg://postgres:postgres@localhost:5432/concierge")
-    sync_database_url: str = Field(default="postgresql://postgres:postgres@localhost:5432/concierge")
-    redis_url: str = Field(default="redis://localhost:6379")
-    minio_endpoint: str = Field(default="localhost:9000")
-    vault_addr: str = Field(default="http://localhost:8200")
-    vault_root_token: str = Field(default="root")
-    model_server_url: str = Field(default="http://localhost:8010")
-    guardrails_url: str = Field(default="http://localhost:8020")
-    modelserver_service_token: str = Field(default="")
-    guardrails_service_token: str = Field(default="")
     vault_addr: str
     vault_token: SecretStr
     vault_app_secret_path: str = "secret/data/concierge/app"
@@ -44,6 +34,8 @@ class AppSecrets(BaseModel):
     minio_endpoint: str
     model_server_url: str
     guardrails_url: str
+    modelserver_service_token: SecretStr = SecretStr("")
+    guardrails_service_token: SecretStr = SecretStr("")
     widget_token_signing_key: SecretStr
     widget_token_ttl_seconds: int = 900
     session_memory_ttl_seconds: int = 1800
@@ -52,6 +44,7 @@ class AppSecrets(BaseModel):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached Vault bootstrap settings."""
+
     settings_cls = cast(Any, Settings)
     return cast(Settings, settings_cls())
 
@@ -59,6 +52,7 @@ def get_settings() -> Settings:
 @lru_cache(maxsize=1)
 def get_app_secrets() -> AppSecrets:
     """Load application settings from Vault."""
+
     settings = get_settings()
     vault = VaultClient(
         addr=settings.vault_addr,
