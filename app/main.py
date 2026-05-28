@@ -3,7 +3,15 @@
 
 from fastapi import FastAPI
 
-from app.api.routes import chat, cms, tenants, widgets
+from app.api.routes import (
+    admin_auth,
+    admin_invites,
+    chat,
+    cms,
+    leads,
+    tenants,
+    widgets,
+)
 
 
 def create_app() -> FastAPI:
@@ -14,6 +22,9 @@ def create_app() -> FastAPI:
     app.include_router(cms.router)
     app.include_router(widgets.router)
     app.include_router(chat.router)
+    app.include_router(admin_auth.router)
+    app.include_router(admin_invites.router)
+    app.include_router(leads.router)
 
     return app
 

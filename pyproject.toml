@@ -20,6 +20,7 @@ dependencies = [
     "structlog",
     "httpx",
     "pyjwt",
+    "bcrypt",
     "python-multipart",
     "scikit-learn",
     "joblib",

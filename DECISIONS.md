@@ -372,3 +372,59 @@ Agent/tool selection: 10/10 passed
 RAG retrieval:        5/5 passed
 
 Status: PASS
+
+## Decision 12 — Admin authentication: bcrypt + admin_users + JWT in Streamlit session_state (Amer, 2026-05-28)
+
+Context: The widget admin pages (`/widgets/config`, tenant/usage/leads/CMS read-only) and tenant-admin role dep were guarded by a mock `require_tenant_admin` that read `X-Concierge-*` dev headers. No login page, no admin user table, no session model.
+
+Decision:
+- New `admin_users` table (alembic `0002_admin_users.py`) with `email UNIQUE`, `password_hash`, `role`, `tenant_id FK`, full RLS enabled.
+- bcrypt directly for password hashing (not passlib — passlib 1.7.4 is incompatible with bcrypt 5.x). 72-byte UTF-8 truncation applied symmetrically on hash + verify.
+- `POST /admin/login` mints an HS256 JWT signed with `ADMIN_JWT_SECRET` (8h TTL, no refresh). Login failures collapse to one byte-identical 401 (`invalid_credentials`) regardless of whether the email or the password was wrong; a dummy bcrypt verify runs on email-miss to keep timing constant.
+- `require_tenant_admin` now tries the Authorization Bearer JWT first; the existing dev-header fallback is retained for the in-tree test suite but is *only* honored when `CONCIERGE_ENV=dev`. In staging/prod the JWT is the only path.
+- Streamlit admin app gates every page behind `st.session_state["admin_token"]`. Token lives server-side in the Streamlit process only — never browser localStorage / cookies (matches the widget storage discipline).
+- Initial admins are seeded via `python -m scripts.seed_admin --email … --tenant-id … --password …`; no self-signup.
+- Single role (`tenant_admin`); `tenant_manager` reserved for a later feature.
+
+Consequences:
+- The `_DEV_HEADERS` block in `admin/_admin_http.py` is gone; `admin/widget_page.py` no longer duplicates the dev headers.
+- BLOCKED.md H4 (real admin session) is resolved. H1, H3, and H4 are now all struck.
+- Tests covering existing widget-admin paths continue to pass because they set `CONCIERGE_ENV=dev` and still send `X-Concierge-*` headers; the production fallback closure is covered by `tests/integration/test_admin_login_flow.py::test_admin_call_without_jwt_in_prod_mode_returns_403`.
+
+## Decision 13 — Admin invite flow + role-based dashboard split (Amer, 2026-05-28)
+
+Context: Decision 12 shipped login but had no way to onboard new admins, and no tenant_manager surface; everyone landed on the same tenant dashboard.
+
+Decision:
+- New `admin_invites` table (migration `0003_admin_invites.py`, RLS-enabled) — single-use UUID token, tenant-scoped, with `expires_at` + `used_at`.
+- Three routes: `POST /admin/invites` (gated by new `require_admin_session` dep — both tenant_admin and tenant_manager can invite), `GET /admin/invites/{token}` (public, returns only `email + role + tenant_name + status`; never leaks invited_by or tenant_id), `POST /admin/invites/{token}/accept` (public, body is `{full_name, password, confirm_password}` — NO email/role/tenant_id fields exist on the request schema, so the visitor cannot override them; the server pulls all three from the invite row).
+- Acceptance enforces password match + minimum-bar strength (8+ chars, letter + digit, ≤72 bytes for bcrypt). Single-use enforced via `used_at` stamp + status check.
+- `admin_users` gains `full_name` (display) and `status` (`active`/`suspended`). Login refuses suspended users + unknown roles, mapped to the same canonical 401 body as wrong-password (no enumeration).
+- Frontend: dispatcher in `admin/streamlit_app.py` reads `st.query_params["page"]` → routes to `accept-invite` (public) or login (public) or role-based dashboard. tenant_manager → `platform_dashboard_page` (placeholder with invite-management form); tenant_admin → existing tenant pages; unknown role → `access_denied_page`. Branded centered card (`admin/brand.py`) shared by login and accept-invite.
+- Role and tenant_id ONLY come from the server-issued login/accept response (`auth_state.set_session`). No form field anywhere lets the user pick either. Logout (`auth_state.clear_session`) wipes every admin_* key.
+
+Consequences:
+- 19 new tests (11 service-unit + 8 HTTP-integration) cover create-by-inviter / get-with-status / accept-creates-user / single-use / expired / weak-password / mismatched-password / suspended-login / body-cannot-override-tenant_id.
+- `require_admin_session` is the dep for cross-role admin routes; `require_tenant_admin` stays the dep for tenant-admin-only routes (widget config). Both use the same JWT verifier and the same dev-headers fallback gated by CONCIERGE_ENV=dev.
+- The "Accept invite" link on the login page deep-links to `?page=accept-invite&token=…` (Streamlit query-param routing — Streamlit has no real client-side router).
+- Platform dashboard is intentionally minimal: list-tenants / suspend / erase live with the platform CRUD endpoints (still Hiba); the invite form is what makes the tenant_manager role useful today.
+
+## Decision 14 — Database schema parity with CONTRACT.md §8.1 (Amer, 2026-05-28)
+
+Context: The live schema (migrations 0001-0003) covered only 9 of the 17 tables CONTRACT.md §8.1 requires, plus 4 existing tables were missing columns the contract specifies. The gap blocked persisted widget configs, real RAG with embeddings, multi-tenant memberships, persistent messages/escalation tickets, and observability traces.
+
+Decision:
+- One additive migration (`0004_contract_schema_parity.py`) closes the gap in a single atomic step.
+- Adds 8 new tables: `users`, `tenant_memberships`, `widget_configs`, `tenant_agent_configs`, `rag_chunks` (pgvector embedding, dim 1536), `messages`, `escalation_tickets`, `traces`.
+- Alters 4 existing tables: `tenants` += slug/plan; `cms_pages` += slug/source_url/status/created_by; `conversations` += widget_id (FK widget_configs.widget_id) / started_at / last_message_at / UNIQUE(tenant_id, session_id); `leads` += conversation_id (FK conversations.id) / status / quality_score.
+- Backfills the new NOT-NULL string columns deterministically (slug from name/title via regex; plan='starter'; status='published'/'captured') so the migration runs cleanly against an already-populated database.
+- Enables RLS with the standard `tenant_isolation` policy on every new tenant-owned table.
+- Installs the `vector` extension; `rag_chunks.embedding` is `vector(1536)` (OpenAI text-embedding-3-small). Dimension lives in one constant in the migration.
+- ORM mirror in `app/db/models.py`: 8 new classes plus extended Tenant/CmsPage/Conversation/Lead. Repos/services for the new tables are left to their contract owners (Nasser/Ayoub/Hiba) — the models are shared so any module can type-check against them without duplicating column definitions.
+- Intentionally additive. The existing `admin_users` / `admin_invites` tables (Decisions 12/13) remain — they back the live login flow. Migrating admin auth onto the contract `users` + `tenant_memberships` shape is a separate decision the auth feature will take when the membership UI lands.
+
+Consequences:
+- 19 tables in the database (vs 11 before); all 194 backend tests still pass and the live `docker compose up` chain is unchanged.
+- BLOCKED.md H2 (SQL widget_configs backend) can now be closed by writing the SQL repository against the new `widget_configs` table — no further schema work needed.
+- `WIDGET_REPO_BACKEND=sql` is no longer NotImplementedError-bait; an implementation can land in a follow-up PR with a one-file repository.
+- The contract's `messages` table replaces the Redis short-term memory as the durable record; Redis stays for fast lookup. Whether ChatService writes to one or both is deferred to the agent owner.

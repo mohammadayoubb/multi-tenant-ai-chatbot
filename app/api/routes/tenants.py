@@ -1,13 +1,24 @@
 # Owner: Hiba
 """Tenant management routes."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import PlatformActor, get_platform_actor, get_tenant_service
-from app.domain.tenant import PlatformRole, UsageEvent
+from app.api.deps import (
+    PlatformActor,
+    TenantAdminContext,
+    get_platform_actor,
+    get_tenant_repository,
+    get_tenant_service,
+    require_admin_session,
+)
+from app.db.session import get_session
+from app.domain.tenant import AuditLogDomain, PlatformRole, UsageEvent
+from app.repositories.tenant_repo import TenantRepository
 from app.schemas.tenant import (
     EraseTenantRequest,
     ErasureResponse,
@@ -145,3 +156,51 @@ def _require_platform_accounting_actor(actor: PlatformActor) -> None:
     """Allow platform managers and tenant admins to inspect accounting state."""
     if actor.actor_role not in {PlatformRole.TENANT_MANAGER, PlatformRole.TENANT_ADMIN}:
         raise HTTPException(status_code=403, detail="Actor cannot access tenant accounting")
+
+
+# ---------------------------------------------------------------------------
+# Admin-JWT-authed read endpoints consumed by the Streamlit admin pages.
+# These run on the same router but use the admin-session dep (Bearer JWT),
+# not the legacy X-Actor-* header dep. The path tenant_id must equal the
+# JWT's tenant_id — a tenant_admin cannot read another tenant's audit log.
+# ---------------------------------------------------------------------------
+
+
+def _require_self_tenant(
+    path_tenant_id: UUID, admin: TenantAdminContext | None
+) -> TenantAdminContext:
+    """Refuse missing JWT and cross-tenant reads with one 403 body."""
+    if admin is None or admin.tenant_id != path_tenant_id:
+        raise HTTPException(status_code=403, detail="forbidden")
+    return admin
+
+
+@router.get("/{tenant_id}/audit-logs")
+async def list_tenant_audit_logs(
+    tenant_id: UUID,
+    admin: Annotated[TenantAdminContext | None, Depends(require_admin_session)],
+    repo: Annotated[TenantRepository, Depends(get_tenant_repository)],
+) -> list[AuditLogDomain]:
+    """Return the most recent audit-log rows for the caller's own tenant."""
+    _require_self_tenant(tenant_id, admin)
+    rows = await repo.list_audit_logs(tenant_id)
+    return [AuditLogDomain.model_validate(r) for r in rows]
+
+
+@router.get("/{tenant_id}/usage")
+async def get_tenant_usage_rollup(
+    tenant_id: UUID,
+    admin: Annotated[TenantAdminContext | None, Depends(require_admin_session)],
+    repo: Annotated[TenantRepository, Depends(get_tenant_repository)],
+    days: int = 30,
+) -> dict:
+    """Return a dashboard-shaped usage rollup for the caller's tenant.
+
+    Window defaults to the last 30 days. Response shape is the one
+    admin/usage_page.py expects (total_tokens, total_cost_usd, by_feature,
+    daily_cost_usd).
+    """
+    _require_self_tenant(tenant_id, admin)
+    safe_days = max(1, min(days, 365))
+    since = datetime.now(UTC) - timedelta(days=safe_days)
+    return await repo.usage_rollup(tenant_id, since=since)

@@ -1,14 +1,16 @@
 # Owner: Amer
 """Shared HTTP-client helper for the admin Streamlit pages.
 
-Extracted under research Decision 8: identical `_DEV_HEADERS` and
-`_http_client()` definitions appeared in admin/tenant_page.py,
-admin/cms_page.py, admin/leads_page.py, and admin/usage_page.py — four files,
-above the ">2 pages" duplication threshold.
+The client attaches `Authorization: Bearer <jwt>` from
+`st.session_state["admin_token"]`. The streamlit_app gate guarantees we never
+reach this code without a token; the helpers still tolerate a missing token
+(request goes out unauthenticated; backend returns 403 and pages fall back
+to their placeholder render — FR-013).
 
-Tests monkeypatch `_http_client` on the calling page module, so each page
-still re-imports the helper at module load and exposes a local `_http_client`
-attribute the tests target.
+`TENANT_ID` is retained as a string constant ONLY because the per-page
+`_SAMPLE_*` placeholder dicts reference it as display data. The real tenant
+identification flows through the JWT in the Authorization header, and URL
+building should use `signed_in_tenant_id()` to read the live session value.
 """
 
 from __future__ import annotations
@@ -17,15 +19,11 @@ import os
 
 import httpx
 
-# TODO(hiba-handoff): once real admin auth lands, drop the dev headers and pull
-# tenant_id / actor_id from the authenticated admin session.
-DEV_HEADERS = {
-    "X-Concierge-Role": "tenant_admin",
-    "X-Concierge-Tenant-Id": "11111111-1111-1111-1111-111111111111",
-    "X-Concierge-Actor-Id": "admin@example.com",
-}
+from admin.auth_state import get_tenant_id, get_token
 
-TENANT_ID = DEV_HEADERS["X-Concierge-Tenant-Id"]
+# Demo tenant id matching the InMemoryWidgetRepository fixture; used only in
+# `_SAMPLE_*` placeholder dicts when the backend is unreachable.
+TENANT_ID = "11111111-1111-1111-1111-111111111111"
 
 
 def backend_url() -> str:
@@ -34,4 +32,18 @@ def backend_url() -> str:
 
 def http_client() -> httpx.Client:
     """Default admin HTTP client. Tests monkeypatch each page's `_http_client`."""
-    return httpx.Client(base_url=backend_url(), headers=DEV_HEADERS, timeout=10.0)
+    headers: dict[str, str] = {}
+    token = get_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return httpx.Client(base_url=backend_url(), headers=headers, timeout=10.0)
+
+
+def signed_in_tenant_id() -> str:
+    """Return the signed-in admin's tenant id for URL building.
+
+    Falls back to the placeholder `TENANT_ID` constant when there is no
+    session — keeps backwards-compatible behavior for tests that hit the page
+    rendering paths without going through login.
+    """
+    return get_tenant_id() or TENANT_ID

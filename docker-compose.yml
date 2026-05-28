@@ -1,5 +1,37 @@
 # Owner: Amer
 services:
+  # ---------------------------------------------------------------------------
+  # One-shot bootstrap: seed Vault, then run alembic migrations.
+  # Both services run to completion and exit; the api service waits for both
+  # via depends_on/service_completed_successfully so a fresh `docker compose
+  # up --build` brings a clean stack up without any manual scripts.
+  # ---------------------------------------------------------------------------
+  vault-seed:
+    build:
+      context: .
+      target: api
+    command: ["python", "-m", "scripts.vault_seed"]
+    env_file: .env
+    depends_on:
+      vault:
+        condition: service_healthy
+    networks: [concierge-net]
+    restart: "no"
+
+  migrations:
+    build:
+      context: .
+      target: api
+    command: ["alembic", "upgrade", "head"]
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      vault-seed:
+        condition: service_completed_successfully
+    networks: [concierge-net]
+    restart: "no"
+
   api:
     build:
       context: .
@@ -14,6 +46,10 @@ services:
         condition: service_healthy
       vault:
         condition: service_healthy
+      vault-seed:
+        condition: service_completed_successfully
+      migrations:
+        condition: service_completed_successfully
       modelserver:
         condition: service_healthy
       guardrails:
@@ -33,6 +69,12 @@ services:
     ports:
       - "${ADMIN_PORT:-8501}:8501"
     env_file: .env
+    environment:
+      # Inside the compose network the api service is reachable at its
+      # service-name hostname; localhost would resolve to the admin container
+      # itself. Hardcoded here (not just in .env) so a fresh clone works
+      # without per-user env editing.
+      CONCIERGE_BACKEND_URL: ${CONCIERGE_BACKEND_URL:-http://api:8000}
     depends_on:
       api:
         condition: service_healthy
@@ -92,6 +134,31 @@ services:
       timeout: 5s
       retries: 10
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    environment:
+      # pgAdmin 8 refuses to accept `.local` (or any TLD on its non-deliverable
+      # list) even when CHECK_EMAIL_DELIVERABILITY is False — use a generic
+      # TLD here so the container boots without per-user config.
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@concierge.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      # Single-user mode so the default email/password unlock the UI without
+      # the extra setup prompt; this is dev-only.
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      # Auto-register the Concierge DB server so it shows up in the sidebar
+      # on first boot; the user still types the Postgres password once when
+      # connecting (no plaintext password ever leaves this host).
+      - ./scripts/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [concierge-net]
+
   redis:
     image: redis:7-alpine
     ports:
@@ -139,3 +206,4 @@ networks:
 volumes:
   postgres_data:
   minio_data:
+  pgadmin_data:

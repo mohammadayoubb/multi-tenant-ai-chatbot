@@ -10,7 +10,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import cast, delete, func, select
+from sqlalchemy.dialects.postgresql import DATE
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.rls import reset_tenant_context, set_tenant_context
@@ -152,6 +153,105 @@ class TenantRepository:
                 rate_limit.window_seconds = window_seconds
             await self._session.flush()
         return rate_limit
+
+    async def usage_rollup(
+        self,
+        tenant_id: UUID,
+        *,
+        since: datetime,
+    ) -> dict[str, Any]:
+        """Return a dashboard-shaped rollup of usage rows since `since`.
+
+        Returned shape matches what admin/usage_page.py expects:
+            {
+              "total_tokens":   int,
+              "total_cost_usd": float,
+              "by_feature":     {feature: {"tokens": int, "cost_usd": float}},
+              "daily_cost_usd": [{"date": "YYYY-MM-DD", "cost_usd": float}],
+            }
+        Tenant-scoped (CONTRACT.md §7) — the WHERE on tenant_id is explicit.
+        """
+        async with self._tenant_context(tenant_id):
+            # Totals: tokens are units where unit_type='tokens'; cost is sum
+            # of estimated_cost_usd over every row regardless of unit_type.
+            totals_result = await self._session.execute(
+                select(
+                    func.coalesce(
+                        func.sum(
+                            func.case(
+                                (TenantUsage.unit_type == "tokens", TenantUsage.units),
+                                else_=0,
+                            )
+                        ),
+                        0,
+                    ).label("total_tokens"),
+                    func.coalesce(
+                        func.sum(TenantUsage.estimated_cost_usd), 0
+                    ).label("total_cost_usd"),
+                ).where(
+                    TenantUsage.tenant_id == tenant_id,
+                    TenantUsage.created_at >= since,
+                )
+            )
+            totals_row = totals_result.one()
+
+            # Per-feature breakdown
+            by_feature_rows = await self._session.execute(
+                select(
+                    TenantUsage.feature,
+                    func.coalesce(
+                        func.sum(
+                            func.case(
+                                (TenantUsage.unit_type == "tokens", TenantUsage.units),
+                                else_=0,
+                            )
+                        ),
+                        0,
+                    ).label("tokens"),
+                    func.coalesce(
+                        func.sum(TenantUsage.estimated_cost_usd), 0
+                    ).label("cost_usd"),
+                )
+                .where(
+                    TenantUsage.tenant_id == tenant_id,
+                    TenantUsage.created_at >= since,
+                )
+                .group_by(TenantUsage.feature)
+            )
+            by_feature: dict[str, dict[str, float | int]] = {}
+            for row in by_feature_rows:
+                by_feature[row.feature] = {
+                    "tokens": int(row.tokens or 0),
+                    "cost_usd": float(row.cost_usd or 0.0),
+                }
+
+            # Daily cost series (ordered)
+            day_col = cast(TenantUsage.created_at, DATE).label("day")
+            daily_rows = await self._session.execute(
+                select(
+                    day_col,
+                    func.coalesce(
+                        func.sum(TenantUsage.estimated_cost_usd), 0
+                    ).label("cost_usd"),
+                )
+                .where(
+                    TenantUsage.tenant_id == tenant_id,
+                    TenantUsage.created_at >= since,
+                )
+                .group_by(day_col)
+                .order_by(day_col)
+            )
+            daily = [
+                {"date": row.day.isoformat(), "cost_usd": float(row.cost_usd or 0.0)}
+                for row in daily_rows
+            ]
+
+        return {
+            "total_tokens": int(totals_row.total_tokens or 0),
+            "total_cost_usd": float(totals_row.total_cost_usd or 0.0),
+            "by_feature": by_feature,
+            "daily_cost_usd": daily,
+        }
 
     async def count_usage_since(self, tenant_id: UUID, action: str, window_start: datetime) -> int:
         """Count tenant usage units for an action since a window start."""

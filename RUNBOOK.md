@@ -9,6 +9,30 @@ cp .env.example .env
 docker compose up --build
 ```
 
+On the first boot the stack runs two one-shot bootstrap services automatically
+before `api` starts:
+
+| Service | Runs | Purpose |
+|---------|------|---------|
+| `vault-seed` | once per `up`, exits | Writes the dev app secrets into Vault (DB URL, Redis URL, widget signing key, …). Idempotent. |
+| `migrations` | once per `up`, exits | Runs `alembic upgrade head` against the Postgres container. Idempotent. |
+
+`api` depends on both via `service_completed_successfully`, so it won't accept
+traffic until the database is on the latest revision.
+
+## pgAdmin
+
+pgAdmin is wired in as `pgadmin` and reachable at `http://localhost:${PGADMIN_PORT:-5050}`.
+
+- Default credentials (override via `.env`): `PGADMIN_DEFAULT_EMAIL=admin@concierge.local` / `PGADMIN_DEFAULT_PASSWORD=admin`.
+- The Concierge DB server is pre-registered in the sidebar via
+  `scripts/pgadmin/servers.json`. You'll be prompted for the Postgres password
+  (`postgres` in dev) the first time you connect — pgAdmin caches it for the
+  session.
+- Dev only. The default credentials and the bypassed master-password prompt
+  are tagged as dev-only in `docker-compose.yml`; change both before exposing
+  the port outside localhost.
+
 ## Run API Locally
 
 ```bash

@@ -8,7 +8,13 @@ import "./styles.css";
 
 type Status = "waiting_for_host_origin" | "exchanging" | "ready" | "unavailable";
 
-const backendUrl: string = window.location.origin;
+// Default: same origin as the iframe (works when the API serves the widget bundle
+// directly, and when the Vite dev server proxies /widgets+/chat to the API).
+// Override at build time with VITE_BACKEND_URL when the widget is hosted from a
+// different origin than the API.
+const backendUrl: string =
+  (import.meta.env.VITE_BACKEND_URL as string | undefined) ??
+  window.location.origin;
 
 function isHostOriginMessage(value: unknown): value is HostOriginMessage {
   return (

@@ -6,6 +6,7 @@ RUN pip install --no-cache-dir uv
 # Copy source FIRST so editable install (-e .) can resolve the packages
 # declared in pyproject.toml's [tool.setuptools].packages.
 COPY pyproject.toml ./
+COPY alembic.ini ./
 COPY app ./app
 RUN uv pip install --system -e ".[dev]"
 COPY modelserver ./modelserver

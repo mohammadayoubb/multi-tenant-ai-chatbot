@@ -211,7 +211,12 @@ describe("host-test.html: sync with loader contract (T021)", () => {
   it("host-test.html embeds the loader with a known widget id", () => {
     const html = loadHostTestSource();
     expect(html).toMatch(/<script[^>]+src=["']\/widget\.js["']/);
-    expect(html).toMatch(/data-widget-id=["']w_demo["']/);
+    // The host-test page uses the in-memory widget fixture id from
+    // InMemoryWidgetRepository._FIXTURE_WIDGET_ID so the local dev stack
+    // round-trips POST /widgets/token without a database.
+    expect(html).toMatch(
+      /data-widget-id=["']9a7e3a3a-1a8d-4f3a-9f06-2e2b9a8b1c6d["']/,
+    );
   });
 
   it("host-test.html does not use async on the loader script tag", () => {

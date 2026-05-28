@@ -14,15 +14,22 @@ from functools import lru_cache
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantAdminContext, require_tenant_admin
+from app.db.session import get_session
 from app.domain.widget import (
     WidgetConfigResponse,
     WidgetConfigUpdateRequest,
     WidgetTokenRequest,
 )
-from app.repositories.widget_repo import get_widget_repository
-from app.services.rate_limiter import per_ip_rate_limiter, per_widget_rate_limiter
+from app.repositories.tenant_repo import TenantRepository
+from app.repositories.widget_repo import WidgetRepository, get_widget_repository
+from app.services.rate_limiter import (
+    RateLimiter,
+    per_ip_rate_limiter,
+    per_widget_rate_limiter,
+)
 from app.services.widget_service import (
     AuditLogger,
     TokenRefused,
@@ -34,50 +41,48 @@ from app.services.widget_service import (
 router = APIRouter(prefix="/widgets", tags=["widgets"])
 
 
-# Singleton service per app process. The RateLimiter Protocol means a Redis-backed
-# implementation can swap in later without touching this route.
+# Rate limiters are process-cached so the token-bucket state survives across
+# requests; the repo is now request-scoped (SQL backend needs a per-request
+# session), so the service is constructed per request from the cached limiters
+# + the freshly-bound repo.
 @lru_cache(maxsize=1)
-def _service() -> WidgetTokenService:
+def _cached_per_ip_limiter() -> RateLimiter:
+    return per_ip_rate_limiter()
+
+
+@lru_cache(maxsize=1)
+def _cached_per_widget_limiter() -> RateLimiter:
+    return per_widget_rate_limiter()
+
+
+def get_widget_token_service(
+    repo: WidgetRepository = Depends(get_widget_repository),
+) -> WidgetTokenService:
     return WidgetTokenService(
-        repo=get_widget_repository(),
-        per_ip_limiter=per_ip_rate_limiter(),
-        per_widget_limiter=per_widget_rate_limiter(),
+        repo=repo,
+        per_ip_limiter=_cached_per_ip_limiter(),
+        per_widget_limiter=_cached_per_widget_limiter(),
     )
 
 
-def get_widget_token_service() -> WidgetTokenService:
-    return _service()
+def get_audit_logger(
+    session: AsyncSession = Depends(get_session),
+) -> AuditLogger:
+    """Return a request-scoped audit logger.
 
-
-class _StubAuditLogger:
-    """Placeholder AuditLogger until Hiba's TenantRepository.add_audit_log lands.
-
-    Production wiring will swap this for a session-bound TenantRepository via
-    a FastAPI dependency. Tests inject a fake via app.dependency_overrides.
+    `TenantRepository` implements the `AuditLogger` Protocol incidentally
+    (matching `add_audit_log` signature); binding to the request session means
+    audit rows commit/rollback with the rest of the unit of work.
     """
-
-    async def add_audit_log(
-        self,
-        tenant_id,
-        actor_role: str,
-        action: str,
-        actor_id: str | None = None,
-        metadata: dict | None = None,
-    ) -> None:
-        # Intentional no-op until Hiba's implementation is wired.
-        # TODO(hiba-handoff): wire to TenantRepository.add_audit_log
-        return None
-
-
-def get_audit_logger() -> AuditLogger:
-    return _StubAuditLogger()
+    return TenantRepository(session)
 
 
 def get_widget_config_service(
+    repo: WidgetRepository = Depends(get_widget_repository),
     audit_logger: AuditLogger = Depends(get_audit_logger),
 ) -> WidgetConfigService:
     return WidgetConfigService(
-        repo=get_widget_repository(),
+        repo=repo,
         audit_logger=audit_logger,
     )
 
