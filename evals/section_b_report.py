@@ -1,4 +1,5 @@
 # Owner: Nasser
+
 """Section B eval summary report.
 
 This script prints simple Owner B metrics for demo/readme use:
@@ -22,6 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+
+# ruff: noqa: E402
 from app.agent.agent import _plan_tools
 from app.agent.router import _fallback_rule_decision
 from app.rag.retriever import RagChunk, _score_chunk, _tokenize, chunk_text
