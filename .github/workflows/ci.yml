@@ -56,7 +56,9 @@ jobs:
         run: ruff check .
 
       - name: Run tests
-        run: pytest
+        # tests/smoke/ requires a live Compose stack (see specs/007); it runs
+        # in the dedicated smoke-e2e job below where the stack is brought up.
+        run: pytest --ignore=tests/smoke
 
       - name: Docker build
         run: docker compose build
