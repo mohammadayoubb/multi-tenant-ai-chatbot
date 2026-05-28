@@ -11,6 +11,7 @@
 
 # Amer's personal spec-kit playbook (not shared with team)
 amer-works.md
+what-amer-worked.md
 
 .venv/
 __pycache__/
