@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from uuid import uuid4
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,7 +67,7 @@ def build_rag_answer(query: str, chunks: list[dict[str, object]]) -> str:
 
 
 async def rag_search(
-    tenant_id: int,
+    tenant_id: UUID,
     query: str,
     top_k: int = 5,
     session: AsyncSession | None = None,
@@ -103,7 +104,7 @@ async def rag_search(
 
 
 async def capture_lead(
-    tenant_id: int,
+    tenant_id: UUID,
     name: str | None,
     contact: str | None,
     intent: str,
@@ -146,7 +147,7 @@ async def capture_lead(
 
 
 async def escalate(
-    tenant_id: int,
+    tenant_id: UUID,
     conversation_id: str,
     reason: str,
 ) -> dict[str, object]:

@@ -19,6 +19,7 @@ import pandas as pd
 import streamlit as st
 
 from admin._admin_http import TENANT_ID, http_client as _http_client
+from admin._admin_http import tenant_id as _tenant_id
 
 _FEATURES = ["chat", "embedding", "classifier", "rag", "agent", "guardrails"]
 _REQUIRED_FIELDS = ("total_tokens", "total_cost_usd", "by_feature", "daily_cost_usd")
@@ -44,9 +45,10 @@ _SAMPLE_USAGE: dict[str, Any] = {
 
 
 def _fetch_usage() -> tuple[dict[str, Any], bool]:
+    current_tenant_id = _tenant_id()
     try:
         with _http_client() as client:
-            resp = client.get(f"/tenants/{TENANT_ID}/usage")
+            resp = client.get(f"/tenants/{current_tenant_id}/usage")
     except httpx.HTTPError:
         return _SAMPLE_USAGE, True
     if resp.status_code < 200 or resp.status_code >= 300:

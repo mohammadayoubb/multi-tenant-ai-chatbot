@@ -14,6 +14,10 @@ services:
         condition: service_healthy
       vault:
         condition: service_healthy
+      vault-seed:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
       modelserver:
         condition: service_healthy
       guardrails:
@@ -45,6 +49,8 @@ services:
     ports:
       - "${MODEL_SERVER_PORT:-8010}:8010"
     env_file: .env
+    environment:
+      MODELSERVER_SERVICE_TOKEN: ${MODELSERVER_SERVICE_TOKEN:-local-modelserver-token}
     networks: [concierge-net]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8010/openapi.json', timeout=2)\" || exit 1"]
@@ -60,6 +66,8 @@ services:
     ports:
       - "${GUARDRAILS_PORT:-8020}:8020"
     env_file: .env
+    environment:
+      GUARDRAILS_SERVICE_TOKEN: ${GUARDRAILS_SERVICE_TOKEN:-local-guardrails-token}
     networks: [concierge-net]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8020/openapi.json', timeout=2)\" || exit 1"]
@@ -67,6 +75,35 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+
+  vault-seed:
+    build:
+      context: .
+      target: api
+    command: ["python", "scripts/vault_seed.py"]
+    env_file: .env
+    environment:
+      MODELSERVER_SERVICE_TOKEN: ${MODELSERVER_SERVICE_TOKEN:-local-modelserver-token}
+      GUARDRAILS_SERVICE_TOKEN: ${GUARDRAILS_SERVICE_TOKEN:-local-guardrails-token}
+    depends_on:
+      vault:
+        condition: service_healthy
+    networks: [concierge-net]
+    restart: "no"
+
+  db-migrate:
+    build:
+      context: .
+      target: api
+    command: ["alembic", "upgrade", "head"]
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      vault-seed:
+        condition: service_completed_successfully
+    networks: [concierge-net]
+    restart: "no"
 
   widget:
     build:

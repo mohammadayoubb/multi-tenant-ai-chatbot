@@ -14,6 +14,7 @@ The service is the main Owner B entry point:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,7 +46,12 @@ class ChatService:
         self._session = session
         self._memory = memory or SessionMemory()
 
-    async def handle_message(self, tenant_id: int, message: str, session_id: str) -> ChatResponse:
+    async def handle_message(
+        self,
+        tenant_id: UUID,
+        message: str,
+        session_id: str,
+    ) -> ChatResponse:
         """Route a message through the workflow path or bounded agent path.
 
         tenant_id must come from trusted backend context, usually the verified
@@ -89,7 +95,7 @@ class ChatService:
 
     async def _execute_decision(
         self,
-        tenant_id: int,
+        tenant_id: UUID,
         session_id: str,
         message: str,
         decision: RouteDecision,

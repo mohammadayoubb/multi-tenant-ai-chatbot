@@ -13,8 +13,9 @@ introduces the SQL adapter against Hiba's widget_configs migration.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Protocol
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.domain.widget import WidgetConfigDomain
 from app.services.widget_settings import widget_settings
@@ -72,6 +73,7 @@ class InMemoryWidgetRepository:
                     "https://customer-site.example",
                     "http://localhost:5500",
                     "http://localhost:5173",
+                    "http://localhost:8000",
                 ],
                 enabled=True,
                 tenant_status="active",
@@ -112,6 +114,29 @@ class InMemoryWidgetRepository:
         self._rows[existing.widget_id] = updated
         return updated
 
+    async def ensure_for_tenant(self, tenant_id: UUID) -> WidgetConfigDomain:
+        """Return one widget row for a tenant, creating a local-dev default if absent."""
+        existing = await self.get_by_tenant_id(tenant_id)
+        if existing is not None:
+            return existing
+
+        widget_row = WidgetConfigDomain(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            widget_id=uuid4(),
+            allowed_origins=[
+                "http://localhost:8000",
+                "http://localhost:5173",
+                "http://localhost:5500",
+            ],
+            enabled=True,
+            tenant_status="active",
+            theme_json=None,
+            greeting="Hi there. Ask about pricing, support, or next steps.",
+        )
+        self._rows[widget_row.widget_id] = widget_row
+        return widget_row
+
     # Test affordances. Not part of the WidgetRepository Protocol.
     def upsert(self, row: WidgetConfigDomain) -> None:
         self._rows[row.widget_id] = row
@@ -120,11 +145,17 @@ class InMemoryWidgetRepository:
         self._rows.clear()
 
 
+@lru_cache(maxsize=1)
+def _memory_widget_repository() -> InMemoryWidgetRepository:
+    """Return the singleton local-dev widget repository."""
+    return InMemoryWidgetRepository()
+
+
 def get_widget_repository() -> WidgetRepository:
     """Factory returning the configured backend (memory|sql)."""
     backend = widget_settings().widget_repo_backend
     if backend == "memory":
-        return InMemoryWidgetRepository()
+        return _memory_widget_repository()
     if backend == "sql":
         raise NotImplementedError(
             "SQL widget repository pending Hiba's widget_configs migration. "

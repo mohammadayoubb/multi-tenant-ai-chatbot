@@ -9,13 +9,19 @@ from typing import Annotated
 from uuid import UUID
 import os
 
+import jwt
 from fastapi import Header, HTTPException, Depends
+from jwt import ExpiredSignatureError, InvalidTokenError
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
 from app.domain.tenant import PlatformRole
 from app.repositories.tenant_repo import TenantRepository
+from app.repositories.widget_repo import get_widget_repository
+from app.services.admin_auth import AdminTokenError, AdminAuthService, get_admin_account_repository
+from app.services.widget_service import normalize_origin
+from app.services.widget_settings import widget_settings
 from app.services.tenant_service import TenantService
 
 
@@ -29,15 +35,66 @@ class PlatformActor:
 
 async def get_tenant_id_from_widget_token(
     authorization: Annotated[str | None, Header()] = None,
+    origin: Annotated[str | None, Header()] = None,
 ) -> UUID:
     """Resolve tenant_id from a signed widget token.
 
-    Amer owns the final widget token flow. Until that verifier lands, this
-    dependency refuses requests instead of returning an unsafe placeholder tenant.
+    The widget token is the only trusted tenant identity input for public chat.
+    The dependency verifies the JWT, checks the claimed origin against the
+    browser-supplied request Origin header, then confirms the widget row still
+    belongs to the claimed tenant and allowlists that origin.
     """
     if authorization is None:
         raise HTTPException(status_code=401, detail="Missing widget token")
-    raise HTTPException(status_code=501, detail="Widget token verification is not implemented")
+
+    scheme, _, raw_token = authorization.partition(" ")
+    token = raw_token.strip()
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="Invalid widget token")
+
+    try:
+        claims = jwt.decode(
+            token,
+            widget_settings().widget_jwt_secret,
+            algorithms=["HS256"],
+            options={
+                "require": ["tenant_id", "widget_id", "origin", "session_id", "iat", "exp"]
+            },
+        )
+    except ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Widget token expired") from exc
+    except InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail="Invalid widget token") from exc
+
+    try:
+        tenant_id = UUID(str(claims["tenant_id"]))
+        widget_id = UUID(str(claims["widget_id"]))
+        token_origin = normalize_origin(str(claims["origin"]))
+        UUID(str(claims["session_id"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid widget token") from exc
+
+    if origin is None:
+        raise HTTPException(status_code=403, detail="Widget origin mismatch")
+
+    try:
+        request_origin = normalize_origin(origin)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Widget origin mismatch") from exc
+
+    if request_origin != token_origin:
+        raise HTTPException(status_code=403, detail="Widget origin mismatch")
+
+    repo = get_widget_repository()
+    config = await repo.get_by_widget_id(widget_id)
+    if config is None:
+        raise HTTPException(status_code=403, detail="Widget origin mismatch")
+
+    allowed_origins = {normalize_origin(value) for value in config.allowed_origins}
+    if config.tenant_id != tenant_id or token_origin not in allowed_origins:
+        raise HTTPException(status_code=403, detail="Widget origin mismatch")
+
+    return tenant_id
 
 
 async def get_platform_actor(
@@ -66,7 +123,6 @@ async def get_tenant_service(
 ) -> TenantService:
     """Build a request-scoped tenant service."""
     return TenantService(repo)
-    return 1
 
 
 @dataclass(frozen=True)
@@ -92,6 +148,7 @@ class TenantAdminContext:
 # E1/E3 indistinguishability — same bytes whether the role is missing, the
 # tenant id is missing, or the row doesn't exist).
 async def require_tenant_admin(
+    authorization: str | None = Header(default=None, alias="Authorization"),
     x_concierge_role: str | None = Header(default=None, alias="X-Concierge-Role"),
     x_concierge_tenant_id: str | None = Header(
         default=None, alias="X-Concierge-Tenant-Id"
@@ -109,6 +166,24 @@ async def require_tenant_admin(
     Raises HTTPException(500) outside CONCIERGE_ENV=dev to prevent accidental
     promotion of header-driven auth.
     """
+    if authorization is not None:
+        scheme, _, raw_token = authorization.partition(" ")
+        token = raw_token.strip()
+        if scheme.lower() == "bearer" and token:
+            auth_service = AdminAuthService(
+                accounts=get_admin_account_repository(),
+                widget_repo=get_widget_repository(),
+            )
+            try:
+                session = auth_service.verify_token(token)
+            except AdminTokenError:
+                session = None
+            if session is not None:
+                return TenantAdminContext(
+                    tenant_id=session.tenant_id,
+                    actor_id=session.actor_id,
+                )
+
     if os.getenv("CONCIERGE_ENV", "dev") != "dev":
         raise HTTPException(
             status_code=500,

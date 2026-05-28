@@ -372,3 +372,16 @@ Agent/tool selection: 10/10 passed
 RAG retrieval:        5/5 passed
 
 Status: PASS
+
+## Decision 12 - Admin session auth + self-bootstrapping local stack (Amer, 2026-05-28)
+
+Context: The main demo flow still depended on raw `X-Concierge-*` headers for admin access, a manual Vault seed step, and a stale `modelserver.main` entrypoint. That meant the product looked assembled in code but could not reliably run end-to-end from `docker compose up`: signup/login was missing, widget config edits were tied to a request-local in-memory repo, and the router could not consistently reach the chosen ONNX classifier with a valid service token.
+
+Decision:
+
+- Add a minimal tenant-admin session flow at `POST /auth/signup`, `POST /auth/login`, and `GET /auth/me`. The Streamlit admin app now gates on this bearer token flow instead of the hardcoded dev headers on the happy path. `require_tenant_admin` verifies the signed admin token first and keeps the old header mock only as a dev/test fallback.
+- Make the local stack self-bootstrap. `docker-compose.yml` now runs a one-shot `vault-seed` service before the API starts, then a one-shot `db-migrate` service (`alembic upgrade head`) before the API becomes healthy. `scripts/vault_seed.py` now writes the modelserver and guardrails service tokens into Vault as part of the app secret payload.
+- Point the runtime modelserver entrypoint back at the real ONNX-backed app by making `modelserver.main` delegate to `modelserver.app`.
+- Keep the dev widget repository process-scoped rather than request-scoped so signup-created widget configs and admin updates persist across requests during a running demo session.
+
+Consequences: A fresh local stack can now provision a tenant admin, issue a real admin bearer token, seed secrets, run migrations, and boot the actual classifier service without manual repair steps. The new admin auth layer is still intentionally a local-development affordance, not a production-grade identity store: accounts live in API process memory today and should be replaced by Hiba's durable auth persistence when that slice lands.

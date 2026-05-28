@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 
 import httpx
+import streamlit as st
 
 # TODO(hiba-handoff): once real admin auth lands, drop the dev headers and pull
 # tenant_id / actor_id from the authenticated admin session.
@@ -32,6 +33,22 @@ def backend_url() -> str:
     return os.getenv("CONCIERGE_BACKEND_URL", "http://localhost:8000")
 
 
+def auth_headers() -> dict[str, str]:
+    """Return bearer auth for the signed admin session when available."""
+    token = st.session_state.get("admin_access_token")
+    if isinstance(token, str) and token.strip():
+        return {"Authorization": f"Bearer {token.strip()}"}
+    return DEV_HEADERS
+
+
+def tenant_id() -> str:
+    """Return the current tenant id from the signed admin session when available."""
+    current_tenant_id = st.session_state.get("admin_tenant_id")
+    if isinstance(current_tenant_id, str) and current_tenant_id.strip():
+        return current_tenant_id.strip()
+    return TENANT_ID
+
+
 def http_client() -> httpx.Client:
     """Default admin HTTP client. Tests monkeypatch each page's `_http_client`."""
-    return httpx.Client(base_url=backend_url(), headers=DEV_HEADERS, timeout=10.0)
+    return httpx.Client(base_url=backend_url(), headers=auth_headers(), timeout=10.0)

@@ -29,6 +29,14 @@ def build_app_secret_payload(
         "minio_endpoint": _env("APP_MINIO_ENDPOINT", "minio:9000"),
         "model_server_url": _env("APP_MODEL_SERVER_URL", "http://modelserver:8010"),
         "guardrails_url": _env("APP_GUARDRAILS_URL", "http://guardrails:8020"),
+        "modelserver_service_token": _env(
+            "APP_MODELSERVER_SERVICE_TOKEN",
+            _env("MODELSERVER_SERVICE_TOKEN", "local-modelserver-token"),
+        ),
+        "guardrails_service_token": _env(
+            "APP_GUARDRAILS_SERVICE_TOKEN",
+            _env("GUARDRAILS_SERVICE_TOKEN", "local-guardrails-token"),
+        ),
         "widget_token_signing_key": (
             widget_token_signing_key
             or os.getenv("APP_WIDGET_TOKEN_SIGNING_KEY")

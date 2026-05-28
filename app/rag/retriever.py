@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,8 +30,8 @@ class RagChunk:
     """Retrieved tenant-scoped CMS chunk."""
 
     chunk_id: str
-    tenant_id: int
-    page_id: int
+    tenant_id: UUID
+    page_id: UUID
     text: str
     score: float
     source_title: str
@@ -71,7 +72,7 @@ def chunk_text(
 
 
 async def retrieve_chunks(
-    tenant_id: int,
+    tenant_id: UUID,
     query: str,
     top_k: int = 5,
     session: AsyncSession | None = None,

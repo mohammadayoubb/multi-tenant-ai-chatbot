@@ -1,14 +1,9 @@
 // Owner: Amer
-// Chat input — controlled textarea with Enter-to-send / Shift+Enter newline.
-//
-// Per spec.md FR-002 / FR-003 / FR-018:
-//   - Enter submits (no modifiers); Shift+Enter inserts a newline.
-//   - Empty / whitespace-only input is ignored.
-//   - Value lives in component state only — never written to browser storage.
+// Controlled textarea with Enter-to-send / Shift+Enter newline.
 
 import React, { useState } from "react";
 
-const MAX_LENGTH = 4000; // per spec Assumptions.
+const MAX_LENGTH = 4000;
 
 interface ChatInputProps {
   disabled: boolean;
@@ -27,7 +22,6 @@ export function ChatInput({ disabled, onSubmit }: ChatInputProps): JSX.Element {
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
-    // Shift+Enter = newline (default browser behavior — do nothing).
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     tryDispatch();
@@ -35,26 +29,50 @@ export function ChatInput({ disabled, onSubmit }: ChatInputProps): JSX.Element {
 
   return (
     <div className="chat-input">
-      <textarea
-        className="chat-input__field"
-        data-testid="chat-input-textarea"
-        placeholder="Ask a question..."
-        maxLength={MAX_LENGTH}
-        rows={2}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-      />
-      <button
-        type="button"
-        className="chat-input__send"
-        data-testid="chat-input-send"
-        disabled={disabled || value.trim().length === 0}
-        onClick={tryDispatch}
-      >
-        Send
-      </button>
+      <div className="chat-input__panel">
+        <textarea
+          className="chat-input__field"
+          data-testid="chat-input-textarea"
+          placeholder="Ask about pricing, product fit, or next steps"
+          maxLength={MAX_LENGTH}
+          rows={3}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+
+        <div className="chat-input__footer">
+          <div className="chat-input__meta">
+            <span className="chat-input__hint">
+              Enter to send. Shift+Enter for a new line.
+            </span>
+            <span className="chat-input__count">{value.length}/{MAX_LENGTH}</span>
+          </div>
+
+          <button
+            type="button"
+            className="chat-input__send"
+            data-testid="chat-input-send"
+            disabled={disabled || value.trim().length === 0}
+            onClick={tryDispatch}
+          >
+            <span>Send</span>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M22 2 11 13" />
+              <path d="m22 2-7 20-4-9-9-4Z" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -15,7 +15,15 @@ COPY scripts ./scripts
 
 RUN uv pip install --system -e ".[dev]"
 
+FROM node:20-alpine AS widget-build
+WORKDIR /widget
+COPY frontend/widget/package.json frontend/widget/package-lock.json ./
+RUN npm ci
+COPY frontend/widget ./
+RUN npm run build
+
 FROM base AS api
+COPY --from=widget-build /widget/dist ./frontend/widget/dist
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 FROM base AS modelserver

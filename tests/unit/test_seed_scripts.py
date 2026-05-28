@@ -22,6 +22,8 @@ def test_vault_seed_payload_matches_app_secret_schema() -> None:
         "minio_endpoint",
         "model_server_url",
         "guardrails_url",
+        "modelserver_service_token",
+        "guardrails_service_token",
         "widget_token_signing_key",
         "widget_token_ttl_seconds",
         "session_memory_ttl_seconds",

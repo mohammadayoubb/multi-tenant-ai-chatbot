@@ -57,12 +57,13 @@
 
       iframe.addEventListener("load", function () {
         if (iframe.contentWindow) {
+          var iframeOrigin = new URL(iframe.src).origin;
           iframe.contentWindow.postMessage(
             {
               type: "concierge.widget.host_origin",
               origin: window.location.origin,
             },
-            iframe.src
+            iframeOrigin
           );
         }
       });

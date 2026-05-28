@@ -59,6 +59,32 @@ describe("loader: hardcoded-host audit (FR-003, SC-006)", () => {
   });
 });
 
+describe("loader: iframe handshake", () => {
+  it("posts the host origin to the iframe using the iframe origin", () => {
+    evaluateLoader({
+      widgetId: "w_demo",
+      backendUrl: "https://api.example.com",
+    });
+    const [iframe] = widgetIframes("w_demo");
+    const postMessage = vi.fn();
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      value: { postMessage },
+    });
+
+    iframe.dispatchEvent(new Event("load"));
+
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: "concierge.widget.host_origin",
+        origin: window.location.origin,
+      },
+      "https://api.example.com",
+    );
+  });
+});
+
 describe("loader: hardened iframe attributes (C3)", () => {
   it("applies hardened iframe attributes", () => {
     evaluateLoader({
@@ -208,10 +234,12 @@ describe("loader: ES2019 syntax baseline (C8, SC-004)", () => {
 });
 
 describe("host-test.html: sync with loader contract (T021)", () => {
-  it("host-test.html embeds the loader with a known widget id", () => {
+  it("host-test.html embeds the loader with the demo fixture widget id", () => {
     const html = loadHostTestSource();
     expect(html).toMatch(/<script[^>]+src=["']\/widget\.js["']/);
-    expect(html).toMatch(/data-widget-id=["']w_demo["']/);
+    expect(html).toMatch(
+      /data-widget-id=["']9a7e3a3a-1a8d-4f3a-9f06-2e2b9a8b1c6d["']/,
+    );
   });
 
   it("host-test.html does not use async on the loader script tag", () => {

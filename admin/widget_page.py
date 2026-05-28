@@ -11,29 +11,14 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 import streamlit as st
 
-# TODO(hiba-handoff): once real admin auth lands, drop the dev headers and pull
-# tenant_id / actor_id from the authenticated admin session.
-_DEV_HEADERS = {
-    "X-Concierge-Role": "tenant_admin",
-    "X-Concierge-Tenant-Id": "11111111-1111-1111-1111-111111111111",
-    "X-Concierge-Actor-Id": "admin@example.com",
-}
-
-
-def _backend_url() -> str:
-    return os.getenv("CONCIERGE_BACKEND_URL", "http://localhost:8000")
-
-
-def _http_client() -> httpx.Client:
-    """Override in tests via monkeypatch."""
-    return httpx.Client(base_url=_backend_url(), headers=_DEV_HEADERS, timeout=10.0)
+from admin._admin_http import backend_url as _backend_url
+from admin._admin_http import http_client as _http_client
 
 
 def _fetch_config() -> dict[str, Any] | None:

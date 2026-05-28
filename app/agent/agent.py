@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,7 +49,7 @@ class _AgentPlan:
 
 
 async def run_agent(
-    tenant_id: int,
+    tenant_id: UUID,
     message: str,
     session_id: str,
     memory: list[MemoryMessage] | None = None,
@@ -217,7 +218,7 @@ def _plan_tools(message: str) -> _AgentPlan:
 
 async def _call_tool(
     tool_name: ToolName,
-    tenant_id: int,
+    tenant_id: UUID,
     session_id: str,
     message: str,
     session: AsyncSession | None,

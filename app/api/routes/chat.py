@@ -1,6 +1,8 @@
 # Owner: Nasser
 """Public chat routes used by the embedded widget."""
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +17,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    tenant_id: int = Depends(get_tenant_id_from_widget_token),
+    tenant_id: UUID = Depends(get_tenant_id_from_widget_token),
     session: AsyncSession = Depends(get_session),
 ) -> ChatResponse:
     """Handle one widget chat message."""

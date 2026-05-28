@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -65,7 +66,7 @@ class SessionMemory:
 
     async def append_message(
         self,
-        tenant_id: int,
+        tenant_id: UUID,
         session_id: str,
         role: str,
         content: str,
@@ -86,7 +87,11 @@ class SessionMemory:
         except RedisError:
             return
 
-    async def get_messages(self, tenant_id: int, session_id: str) -> list[MemoryMessage]:
+    async def get_messages(
+        self,
+        tenant_id: UUID,
+        session_id: str,
+    ) -> list[MemoryMessage]:
         """Return recent redacted messages for one tenant-scoped session."""
 
         key = self.key_for(tenant_id, session_id)
@@ -113,7 +118,7 @@ class SessionMemory:
         return messages
 
     @staticmethod
-    def key_for(tenant_id: int, session_id: str) -> str:
+    def key_for(tenant_id: UUID, session_id: str) -> str:
         """Build the contract-required Redis memory key."""
 
         safe_session_id = _safe_key_part(session_id)

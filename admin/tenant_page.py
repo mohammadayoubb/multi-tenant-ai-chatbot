@@ -19,6 +19,7 @@ import httpx
 import streamlit as st
 
 from admin._admin_http import TENANT_ID, http_client as _http_client
+from admin._admin_http import tenant_id as _tenant_id
 
 _SAMPLE_TENANT: dict[str, Any] = {
     "id": TENANT_ID,
@@ -102,11 +103,15 @@ def _render_audit_log(rows: list[dict[str, Any]], placeholder: bool) -> None:
 
 
 def render() -> None:
-    tenant_body = _fetch_json(f"/tenants/{TENANT_ID}", required=("name", "status", "created_at"))
+    current_tenant_id = _tenant_id()
+    tenant_body = _fetch_json(
+        f"/tenants/{current_tenant_id}",
+        required=("name", "status", "created_at"),
+    )
     tenant_placeholder = tenant_body is None
     tenant = tenant_body if isinstance(tenant_body, dict) else _SAMPLE_TENANT
 
-    audit_body = _fetch_json(f"/tenants/{TENANT_ID}/audit-logs", required=())
+    audit_body = _fetch_json(f"/tenants/{current_tenant_id}/audit-logs", required=())
     audit_placeholder = not isinstance(audit_body, list) or not audit_body
     audit_rows = audit_body if isinstance(audit_body, list) and audit_body else _SAMPLE_AUDIT
 
