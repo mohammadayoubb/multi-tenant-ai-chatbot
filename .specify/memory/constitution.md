@@ -1,6 +1,5 @@
 <!--
 Sync Impact Report
-==================
 Version change: (none) → 1.0.0
 Bump rationale: Initial ratification of the Concierge project constitution.
 

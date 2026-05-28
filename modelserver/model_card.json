@@ -1,9 +1,124 @@
-// Owner: Ayoub
 {
-  "task": "visitor intent classification",
-  "classical_model": "tfidf_logistic_regression",
-  "dl_model": "small_dl_exported_to_onnx",
-  "llm_baseline": "zero_shot_api",
-  "shipped_model": "placeholder",
-  "sha256": "placeholder"
+  "task": "Five-class router classification for Concierge inbound visitor messages",
+  "owner": "Ayoub / Owner C",
+  "dataset": {
+    "name": "Combined public Concierge router dataset",
+    "sources": [
+      {
+        "name": "UCI SMS Spam Collection",
+        "used_for": "spam"
+      },
+      {
+        "name": "Bitext Customer Support Intent Dataset",
+        "used_for": "faq, sales_or_contact, human_request"
+      },
+      {
+        "name": "CLINC OOS Dataset",
+        "used_for": "ambiguous"
+      }
+    ],
+    "dataset_sha256": "4fb092710fa9f22a230ed30233624ccb65abf48ff8c27c0507ee64e2ec4d431c",
+    "dataset_copy": "data/concierge_combined_public_router_dataset.csv",
+    "train_rows": 2753,
+    "test_rows": 689,
+    "split": "80/20 stratified split with random_state=42"
+  },
+  "labels": [
+    "ambiguous",
+    "faq",
+    "human_request",
+    "sales_or_contact",
+    "spam"
+  ],
+  "models_compared": {
+    "classical_tfidf_logreg": {
+      "macro_f1": 0.9680256296525975,
+      "accuracy": 0.9680696661828737,
+      "latency_ms": 0.1878843947748314,
+      "cost_usd": 0.0,
+      "artifact": "modelserver/artifacts/classical_tfidf_logreg_combined_router.joblib",
+      "artifact_sha256": "f692cb1e05ccaf59f40e236be7a0897041204ba9a80da66793977d793050dddf"
+    },
+    "small_dl_onnx": {
+      "macro_f1": 0.975232547658873,
+      "accuracy": 0.9753265602322206,
+      "latency_ms": 0.14503073584911907,
+      "cost_usd": 0.0,
+      "onnx_artifact": "modelserver/artifacts/dl_tfidf_mlp_combined_router.onnx",
+      "onnx_artifact_sha256": "3de67392de388c518f552fb899cfc171c6dd9681988792c8f443788aa8e463c8",
+      "vectorizer_artifact": "modelserver/artifacts/dl_tfidf_vectorizer_combined_router.joblib",
+      "vectorizer_sha256": "a77a8014af04464129cbda02d3dd0aceae38933caf89e52117ff647a7fa9a4d3",
+      "label_encoder_artifact": "modelserver/artifacts/label_encoder_combined_router.joblib",
+      "label_encoder_sha256": "381d46ddf5f57a62cb3e0e866d0d3ec8ff2872d6f18e907b5792454037b7f03e",
+      "labels_artifact": "modelserver/artifacts/labels_combined_router.json",
+      "labels_sha256": "2a23161a8daf68e5a2be6fae42b3435deb055193d52d3f15ad7fcd4b18ef1bd9"
+    },
+    "llm_zero_shot": {
+      "status": "completed",
+      "model": "gpt-4o-mini",
+      "sample_size": 100,
+      "macro_f1": 0.5429079787295665,
+      "accuracy": 0.57,
+      "latency_ms": 752.611330480004,
+      "classification_report": {
+        "ambiguous": {
+          "precision": 1.0,
+          "recall": 0.19047619047619047,
+          "f1-score": 0.32,
+          "support": 21.0
+        },
+        "faq": {
+          "precision": 0.3333333333333333,
+          "recall": 0.65,
+          "f1-score": 0.4406779661016949,
+          "support": 20.0
+        },
+        "human_request": {
+          "precision": 0.5625,
+          "recall": 0.75,
+          "f1-score": 0.6428571428571429,
+          "support": 24.0
+        },
+        "sales_or_contact": {
+          "precision": 0.6666666666666666,
+          "recall": 0.25,
+          "f1-score": 0.36363636363636365,
+          "support": 16.0
+        },
+        "spam": {
+          "precision": 0.9473684210526315,
+          "recall": 0.9473684210526315,
+          "f1-score": 0.9473684210526315,
+          "support": 19.0
+        },
+        "accuracy": 0.57,
+        "macro avg": {
+          "precision": 0.7019736842105263,
+          "recall": 0.5575689223057644,
+          "f1-score": 0.5429079787295665,
+          "support": 100.0
+        },
+        "weighted avg": {
+          "precision": 0.6983333333333333,
+          "recall": 0.57,
+          "f1-score": 0.5478031256878715,
+          "support": 100.0
+        }
+      },
+      "prompt_tokens": 17887,
+      "completion_tokens": 148,
+      "estimated_cost_usd": 0.0027718499999999997,
+      "cost_note": "Approximate cost based on notebook assumptions; verify current provider pricing before final submission."
+    }
+  },
+  "chosen_model": "small_dl_onnx",
+  "chosen_artifact": "modelserver/artifacts/dl_tfidf_mlp_combined_router.onnx",
+  "chosen_artifact_sha256": "3de67392de388c518f552fb899cfc171c6dd9681988792c8f443788aa8e463c8",
+  "decision_summary": "The ONNX model performed best with around 0.975 macro-F1, while the LLM baseline was slower, more expensive, and less accurate. So we chose the ONNX model as the best production candidate for the router",
+  "serving_constraints": {
+    "no_torch_in_serving_container": true,
+    "no_transformers_in_serving_container": true,
+    "training_only_in_notebook": true,
+    "modelserver_must_verify_artifact_sha256_on_boot": true
+  }
 }

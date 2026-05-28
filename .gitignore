@@ -36,3 +36,4 @@ logs/
 # and uploaded as a CI artifact on failure; not source of truth.
 smoke-report.json
 docker-compose.logs
+__pycache__
