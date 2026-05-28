@@ -1,12 +1,36 @@
-# Owner: Ayoub
-# SECURITY.md
+## Ayoub — Modelserver, Guardrails, Redaction, and Service Security
 
-## Security Rules
+### 1. Security Scope
 
-- Never trust `tenant_id` from a request body.
-- Tenant context comes from authenticated user or signed widget token.
-- CORS is not authentication.
-- Platform guardrails cannot be edited by tenants.
-- Logs, traces, memory, and prompts must be redacted.
-- Tenant manager cannot read tenant private data.
-- Erasure must delete rows, vectors, blobs, sessions, and traces where applicable.
+Owner C is responsible for the security layer around:
+
+- classifier modelserver
+- guardrails sidecar
+- redaction
+- service-to-service authentication
+- tracing safety
+- red-team and redaction evals
+
+This work supports the main Concierge security goal:
+
+> Tenant A must never access Tenant B data, prompts, conversations, leads, vectors, traces, or private configuration.
+
+---
+
+### 2. Service-to-Service Authentication
+
+Internal services must authenticate each other.
+
+The project does not rely on Docker networking as authentication. Even if services are running inside the same Docker Compose network, each protected internal endpoint still requires a Bearer token.
+
+Protected internal endpoints:
+
+| Service | Endpoint | Auth Required |
+|---|---|---|
+| Modelserver | `POST /predict` | Yes |
+| Guardrails | `POST /check` | Yes |
+
+The shared helper is:
+
+```text
+app/infra/service_auth.py
