@@ -88,7 +88,6 @@ async def get_tenant_service(
 ) -> TenantService:
     """Build a request-scoped tenant service."""
     return TenantService(repo)
-    return 1
 
 
 @dataclass(frozen=True)

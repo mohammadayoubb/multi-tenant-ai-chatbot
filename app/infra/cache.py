@@ -16,6 +16,10 @@ from app.config import get_settings
 from app.infra.redaction import redact_text
 
 
+class MemoryUnavailableError(RuntimeError):
+    """Redis-backed session memory could not be reached on this operation."""
+
+
 @dataclass(frozen=True)
 class MemoryMessage:
     """One redacted chat memory entry."""
@@ -83,8 +87,8 @@ class SessionMemory:
             await self._redis.rpush(key, json.dumps(message.__dict__))
             await self._redis.ltrim(key, -self._max_messages, -1)
             await self._redis.expire(key, self._ttl_seconds)
-        except RedisError:
-            return
+        except RedisError as exc:
+            raise MemoryUnavailableError(str(exc)) from exc
 
     async def get_messages(self, tenant_id: int, session_id: str) -> list[MemoryMessage]:
         """Return recent redacted messages for one tenant-scoped session."""
@@ -93,8 +97,8 @@ class SessionMemory:
 
         try:
             raw_items = await self._redis.lrange(key, 0, -1)
-        except RedisError:
-            return []
+        except RedisError as exc:
+            raise MemoryUnavailableError(str(exc)) from exc
 
         messages: list[MemoryMessage] = []
         for item in raw_items:

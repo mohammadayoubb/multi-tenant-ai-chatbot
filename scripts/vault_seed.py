@@ -12,6 +12,7 @@ from typing import Mapping
 import hvac  # type: ignore[import-untyped]
 
 from app.config import get_settings
+from app.infra.vault import LLM_ANTHROPIC_KEY_PATH, LLM_GROQ_KEY_PATH
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,16 +57,102 @@ def seed_vault_app_secrets(
     return secret_path
 
 
+def build_llm_secret_payload(anthropic_api_key: str | None = None) -> dict[str, str]:
+    """Build the legacy Anthropic credential payload (kept for rollback)."""
+    return {
+        "anthropic_api_key": (
+            anthropic_api_key
+            or os.getenv("ANTHROPIC_API_KEY")
+            or ""
+        ),
+    }
+
+
+def build_groq_secret_payload(groq_api_key: str | None = None) -> dict[str, str]:
+    """Build the live Groq credential payload (DECISION 19b revised)."""
+    return {
+        "groq_api_key": (
+            groq_api_key
+            or os.getenv("GROQ_API_KEY")
+            or ""
+        ),
+    }
+
+
+def seed_vault_llm_secrets(
+    payload: Mapping[str, str] | None = None,
+    path: str | None = None,
+) -> str:
+    """Write the legacy Anthropic API key into Vault (rollback path)."""
+    settings = get_settings()
+    secret_path = path or LLM_ANTHROPIC_KEY_PATH
+    secret_payload = dict(payload or build_llm_secret_payload())
+    client = hvac.Client(
+        url=settings.vault_addr,
+        token=settings.vault_token.get_secret_value(),
+        timeout=settings.vault_timeout_seconds,
+    )
+    client.write(secret_path, data=secret_payload)
+    return secret_path
+
+
+def seed_vault_groq_secret(
+    payload: Mapping[str, str] | None = None,
+    path: str | None = None,
+) -> str:
+    """Write the Groq API key into Vault at the dedicated LLM path."""
+    settings = get_settings()
+    secret_path = path or LLM_GROQ_KEY_PATH
+    secret_payload = dict(payload or build_groq_secret_payload())
+    client = hvac.Client(
+        url=settings.vault_addr,
+        token=settings.vault_token.get_secret_value(),
+        timeout=settings.vault_timeout_seconds,
+    )
+    client.write(secret_path, data=secret_payload)
+    return secret_path
+
+
 def main() -> None:
     """Seed local development secrets into Vault."""
     parser = argparse.ArgumentParser(description="Seed local app secrets into Vault.")
     parser.add_argument("--path", default=None, help="Override VAULT_APP_SECRET_PATH.")
+    parser.add_argument(
+        "--llm-path",
+        default=None,
+        help=f"Override legacy Anthropic LLM secret path (default: {LLM_ANTHROPIC_KEY_PATH}).",
+    )
+    parser.add_argument(
+        "--groq-path",
+        default=None,
+        help=f"Override Groq LLM secret path (default: {LLM_GROQ_KEY_PATH}).",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     payload = build_app_secret_payload()
     secret_path = seed_vault_app_secrets(payload=payload, path=args.path)
     LOGGER.info("Seeded %s app secret keys into Vault at %s", len(payload), secret_path)
+
+    llm_payload = build_llm_secret_payload()
+    llm_path = seed_vault_llm_secrets(payload=llm_payload, path=args.llm_path)
+    if llm_payload["anthropic_api_key"]:
+        LOGGER.info("Seeded anthropic_api_key (rollback only) into Vault at %s", llm_path)
+    else:
+        LOGGER.info(
+            "Seeded empty anthropic_api_key at %s (legacy rollback path; safe to leave blank)",
+            llm_path,
+        )
+
+    groq_payload = build_groq_secret_payload()
+    groq_path = seed_vault_groq_secret(payload=groq_payload, path=args.groq_path)
+    if groq_payload["groq_api_key"]:
+        LOGGER.info("Seeded groq_api_key into Vault at %s", groq_path)
+    else:
+        LOGGER.warning(
+            "Seeded empty groq_api_key at %s (set GROQ_API_KEY before running the agent loop)",
+            groq_path,
+        )
 
 
 def _env(name: str, default: str) -> str:

@@ -3,11 +3,16 @@
 
 Easy cases should avoid the expensive agent path. The preferred path is the
 modelserver classifier; deterministic rules are kept as a safe local fallback
-for development and tests when the modelserver/token is unavailable.
+for development and tests when no modelserver client can be constructed (e.g.
+missing token in local dev).
+
+Per contracts/agent-internals.md C-T2-1, modelserver 5xx/timeout must fail-soft
+to the bounded agent path — never silent-route to a destructive workflow.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Literal
 
@@ -17,7 +22,17 @@ from app.infra.modelserver import ModelserverClient, ModelserverClientError
 RouterRoute = Literal["blocked", "rag_search", "capture_lead", "escalate", "agent"]
 RouterLabel = Literal["spam", "faq", "sales_or_contact", "human_request", "ambiguous"]
 
-_MIN_MODEL_CONFIDENCE = 0.65
+_DEFAULT_CONFIDENCE_THRESHOLD = 0.70
+
+
+def _confidence_threshold() -> float:
+    raw = os.environ.get("ROUTER_CONFIDENCE_THRESHOLD")
+    if raw is None or raw.strip() == "":
+        return _DEFAULT_CONFIDENCE_THRESHOLD
+    try:
+        return float(raw)
+    except ValueError:
+        return _DEFAULT_CONFIDENCE_THRESHOLD
 
 
 @dataclass(frozen=True)
@@ -46,11 +61,13 @@ async def route_message_decision(
 ) -> RouteDecision:
     """Return a structured router decision for one inbound visitor message.
 
-    The router tries the trained classifier first. If the classifier is not
-    available in local development, deterministic fallback rules keep the chat
-    flow usable for demos and tests.
-
-    Low-confidence model predictions fail safe to the bounded agent path.
+    Decision rule (C-T2-1):
+      - spam (any confidence)              -> blocked
+      - ambiguous (any confidence)         -> agent
+      - confidence < threshold             -> agent
+      - faq/sales_or_contact/human_request -> workflow path (rag_search/capture_lead/escalate)
+      - modelserver 5xx/timeout            -> agent (fail-soft, reason="modelserver_unavailable")
+      - no client available (dev/no token) -> deterministic fallback rules
     """
 
     cleaned_message = message.strip()
@@ -65,30 +82,56 @@ async def route_message_decision(
 
     client = modelserver_client or _default_modelserver_client()
 
-    if client is not None:
-        try:
-            prediction = await client.predict(cleaned_message)
-            if prediction.confidence < _MIN_MODEL_CONFIDENCE:
-                return RouteDecision(
-                    route="agent",
-                    label=prediction.label,
-                    confidence=prediction.confidence,
-                    reason="Classifier confidence below threshold; failing safe to agent.",
-                    source="modelserver",
-                )
+    if client is None:
+        return _fallback_rule_decision(cleaned_message)
 
-            return RouteDecision(
-                route=_LABEL_TO_ROUTE[prediction.label],
-                label=prediction.label,
-                confidence=prediction.confidence,
-                reason="Classifier selected high-confidence workflow route.",
-                source="modelserver",
-            )
-        except ModelserverClientError:
-            # Development/test fallback. Do not log raw visitor text here.
-            pass
+    try:
+        prediction = await client.predict(cleaned_message)
+    except ModelserverClientError:
+        return RouteDecision(
+            route="agent",
+            label="ambiguous",
+            confidence=0.0,
+            reason="modelserver_unavailable: failing safe to agent.",
+            source="modelserver",
+        )
 
-    return _fallback_rule_decision(cleaned_message)
+    threshold = _confidence_threshold()
+
+    if prediction.label == "spam":
+        return RouteDecision(
+            route="blocked",
+            label="spam",
+            confidence=prediction.confidence,
+            reason="Classifier labelled message as spam.",
+            source="modelserver",
+        )
+
+    if prediction.label == "ambiguous":
+        return RouteDecision(
+            route="agent",
+            label="ambiguous",
+            confidence=prediction.confidence,
+            reason="Classifier labelled message ambiguous; routing to agent.",
+            source="modelserver",
+        )
+
+    if prediction.confidence < threshold:
+        return RouteDecision(
+            route="agent",
+            label=prediction.label,
+            confidence=prediction.confidence,
+            reason="Classifier confidence below threshold; failing safe to agent.",
+            source="modelserver",
+        )
+
+    return RouteDecision(
+        route=_LABEL_TO_ROUTE[prediction.label],
+        label=prediction.label,
+        confidence=prediction.confidence,
+        reason="Classifier selected high-confidence workflow route.",
+        source="modelserver",
+    )
 
 
 async def route_message(message: str) -> str:

@@ -742,6 +742,45 @@ lead.captured
 conversation.escalated
 ```
 
+Feature 010 additions (Track 1 — 8 entries):
+
+```text
+tenant.agent_config_updated
+tenant.settings_updated
+cms.page_published
+cms.page_unpublished
+escalation.status_changed
+escalation.assignee_changed
+admin.invite_revoked
+admin.invite_resent
+```
+
+Feature 010 additions (Track 2 — 8 entries):
+
+```text
+escalation.created
+lead.rate_limited
+memory.unavailable
+agent.turn_started
+agent.tool_called
+agent.turn_completed
+agent.iteration_cap_hit
+agent.token_cap_hit
+```
+
+Metadata-emission rules for every entry above:
+
+- All free-text metadata fields pass through `app/infra/redaction.py` before
+  persist. No raw PII, no raw tokens, no full prompt strings, no message
+  content. Excerpts capped at 80 characters and redacted.
+- `tenant_id` is set at the audit row level (column on `audit_logs`), never
+  inside the metadata payload.
+- `actor_id` is present only when a human or admin actor initiated the
+  event; absent for Track-2 agent events whose actor is the system itself.
+
+The full per-action metadata field list lives in
+[specs/010-fe-be-integration/contracts/audit-vocabulary.md](specs/010-fe-be-integration/contracts/audit-vocabulary.md).
+
 ### `tenant_usage`
 
 Owner: Hiba

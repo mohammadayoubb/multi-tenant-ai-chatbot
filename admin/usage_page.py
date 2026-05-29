@@ -26,6 +26,7 @@ import streamlit as st
 from admin._admin_http import (
     TENANT_ID,
     http_client as _http_client,
+    render_placeholder_caption,
     signed_in_tenant_id,
 )
 from admin._kpi import render_kpi_row
@@ -109,9 +110,8 @@ def _render_tm() -> None:
     """Tenant Manager: per-tenant filter + same headline / breakdown chart."""
     tenants, placeholder = _fetch_tenants()
     if placeholder or not tenants:
-        st.caption(
-            "(placeholder) — using the sample tenant; backend `GET /tenants` "
-            "was unavailable."
+        render_placeholder_caption(
+            "using the sample tenant; backend `GET /tenants` was unavailable."
         )
         target_id = TENANT_ID
         target_name = "Sample tenant"
@@ -124,7 +124,7 @@ def _render_tm() -> None:
 
     usage, usage_placeholder = _fetch_usage_for(target_id)
     if usage_placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
 
     total_tokens = int(usage.get("total_tokens", 0))
     total_cost = float(usage.get("total_cost_usd", 0.0))
@@ -173,7 +173,7 @@ def render(*, role: str = "tenant_admin") -> None:
         return
     usage, placeholder = _fetch_usage()
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
 
     total_tokens = int(usage.get("total_tokens", 0))
     total_cost = float(usage.get("total_cost_usd", 0.0))

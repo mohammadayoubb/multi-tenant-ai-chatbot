@@ -27,11 +27,13 @@ from typing import Any
 import httpx
 import streamlit as st
 
-from admin._admin_http import http_client as _http_client
+from admin._admin_http import (
+    PLACEHOLDER as _PLACEHOLDER,
+    http_client as _http_client,
+    render_placeholder_caption,
+)
 from admin._kpi import render_kpi_row
 from admin.auth_state import get_actor_id
-
-_PLACEHOLDER = "—"
 
 # Actions that should count toward "open audit-flagged actions" in the headline.
 # Suspensions, erasures, and revocations are the platform-operator-visible
@@ -111,10 +113,9 @@ def render() -> None:
     )
 
     if not all([tenants_ok, audit_ok]):
-        st.caption(
-            "(placeholder) — one or more platform endpoints were unavailable; "
-            "the affected cards show "
-            f"`{_PLACEHOLDER}` until the service responds."
+        render_placeholder_caption(
+            "one or more platform endpoints were unavailable; "
+            f"the affected cards show `{_PLACEHOLDER}` until the service responds."
         )
     else:
         st.caption("Use the sidebar to drill into Tenants, Invites, or Audit Logs.")

@@ -11,8 +11,13 @@ Schema:
       default_invite_ttl_seconds      int NOT NULL DEFAULT 604800,
       rate_limit_chat_per_minute      int NOT NULL DEFAULT 30,
       rate_limit_token_per_minute     int NOT NULL DEFAULT 60,
+      rate_limit_lead_per_session     int NOT NULL DEFAULT 5,
       created_at / updated_at         timestamps
     )
+
+`rate_limit_lead_per_session` (feature 010 §R7) backs the Track-2
+`capture_lead` per-session bucket. Bundled into 0006 rather than a separate
+0007 migration because 0006 has not shipped yet (Principle VII).
 
 UNIQUE(tenant_id) guarantees at most one settings row per tenant; the service
 layer treats first read as upsert-of-defaults.
@@ -63,6 +68,12 @@ def upgrade() -> None:
             sa.Integer(),
             nullable=False,
             server_default="60",
+        ),
+        sa.Column(
+            "rate_limit_lead_per_session",
+            sa.Integer(),
+            nullable=False,
+            server_default="5",
         ),
         sa.Column(
             "created_at",

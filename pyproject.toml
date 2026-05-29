@@ -27,6 +27,8 @@ dependencies = [
     "onnxruntime",
     "numpy",
     "streamlit",
+    "anthropic>=0.40",
+    "groq>=0.11",
 ]
 
 [project.optional-dependencies]
@@ -45,6 +47,15 @@ exclude = ["frontend*", "tests*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# T101: ban new imports of legacy modules that have been removed or are slated
+# for removal. `app.services.cms_service` was deleted in feature 010 Phase 7
+# (T096); `app.services.admin_settings` is retained for now (still imported by
+# admin_auth and tests) but its name overlaps the new `tenant_settings_service`
+# surface — guard against accidental new usage from non-auth callers.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"app.services.cms_service".msg = "app.services.cms_service was removed in feature 010 T096. Use app.repositories.cms_repo + app.domain.cms instead."
 
 [tool.mypy]
 python_version = "3.11"

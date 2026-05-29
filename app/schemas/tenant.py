@@ -74,3 +74,21 @@ class RateLimitResponse(BaseModel):
     used: int
     remaining: int | None
     window_seconds: int | None
+
+
+class TenantListItem(BaseModel):
+    """One row of the TM-scope ``GET /tenants`` feed (010 T071).
+
+    Metadata-only — no content fields. The route layer (admin-JWT-gated, TM
+    only) populates this from `TenantRepository.list_all()`; cross-tenant
+    refusal is byte-uniform 403 for non-TM callers.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    slug: str | None = None
+    status: str
+    plan: str | None = None
+    created_at: datetime | None = None

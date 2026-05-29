@@ -563,6 +563,9 @@ class TenantSettings(Base):
     rate_limit_token_per_minute: Mapped[int] = mapped_column(
         Integer, nullable=False, default=60
     )
+    rate_limit_lead_per_session: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=5
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
     )

@@ -18,7 +18,7 @@ from typing import Any
 import httpx
 import streamlit as st
 
-from admin._admin_http import http_client as _http_client
+from admin._admin_http import http_client as _http_client, render_placeholder_caption
 from admin._table import render_table
 
 _STATUS_OPTIONS = ["all", "draft", "published", "archived"]
@@ -280,7 +280,7 @@ def _render_delete_controls(page: dict[str, Any]) -> None:
 def render() -> None:
     pages, placeholder = _fetch_pages()
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
 
     _render_create_form()
 

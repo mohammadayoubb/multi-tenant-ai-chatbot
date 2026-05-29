@@ -26,7 +26,11 @@ from typing import Any
 import httpx
 import streamlit as st
 
-from admin._admin_http import http_client as _http_client, signed_in_tenant_id
+from admin._admin_http import (
+    http_client as _http_client,
+    render_placeholder_caption,
+    signed_in_tenant_id,
+)
 from admin._status_pill import render_status
 from admin._table import render_table
 
@@ -218,7 +222,7 @@ def render() -> None:
     admins, admin_endpoint_pending = _fetch_admins()
 
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
     if admin_endpoint_pending:
         st.caption(
             "Assignee endpoint pending — the assignee dropdown is disabled "
