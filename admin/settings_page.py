@@ -88,6 +88,15 @@ def render() -> None:
         )
     )
 
+    # Confirmation lives OUTSIDE the form on purpose. Streamlit batches form
+    # widget interactions until submit, so a checkbox inside the form would
+    # never re-trigger a rerun to flip `disabled=not confirm` on the submit
+    # button — the user would be permanently locked out.
+    confirm = st.checkbox(
+        "I confirm these settings apply across the tenant immediately.",
+        key="tm_settings_confirm",
+    )
+
     with st.form("tm_settings_form"):
         ttl = st.number_input(
             f"Default invite TTL (seconds) — between {_TTL_MIN} and {_TTL_MAX}",
@@ -113,10 +122,8 @@ def render() -> None:
             step=1,
             key="tm_settings_token",
         )
-        confirm = st.checkbox(
-            "I confirm these settings apply across the tenant immediately.",
-            key="tm_settings_confirm",
-        )
+        if not confirm:
+            st.caption("Tick the confirmation checkbox above to enable Save.")
         submitted = st.form_submit_button(
             "Save settings", type="primary", disabled=not confirm
         )

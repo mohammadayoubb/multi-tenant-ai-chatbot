@@ -7,7 +7,7 @@ Repositories contain SQL only and must keep tenant boundaries explicit.
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -58,12 +58,20 @@ class TenantRepository:
         return result.scalar_one_or_none()
 
     async def set_status(self, tenant_id: UUID, status: str) -> Tenant | None:
-        """Update one tenant's lifecycle status."""
+        """Update one tenant's lifecycle status.
+
+        `tenants.updated_at` has `onupdate=func.now()` server-side; after the
+        UPDATE the attribute is marked expired and any subsequent sync access
+        (e.g. `pydantic.model_validate(tenant)`) triggers a lazy-load outside
+        the async greenlet context → MissingGreenlet. Refresh so the new
+        timestamp is loaded into the instance before the caller reads it.
+        """
         tenant = await self.get_by_id(tenant_id)
         if tenant is None:
             return None
         tenant.status = status
         await self._session.flush()
+        await self._session.refresh(tenant)
         return tenant
 
     async def add_audit_log(
@@ -369,15 +377,22 @@ class TenantRepository:
         started_at: datetime,
         completed_at: datetime | None = None,
     ) -> ErasureJob:
-        """Record tenant erasure job bookkeeping."""
+        """Record tenant erasure job bookkeeping.
+
+        `erasure_jobs.started_at` / `completed_at` are TIMESTAMP WITHOUT TIME
+        ZONE columns (schema default across this codebase), but callers pass
+        tz-aware datetimes via `datetime.now(UTC)`. asyncpg rejects that with
+        `can't subtract offset-naive and offset-aware datetimes`. Coerce to
+        naive-UTC at the boundary so the schema and code stay consistent.
+        """
         async with self._tenant_context(tenant_id):
             erasure_job = ErasureJob(
                 tenant_id=tenant_id,
                 requested_by=requested_by,
                 status=status,
                 deleted_counts_json=deleted_counts,
-                started_at=started_at,
-                completed_at=completed_at,
+                started_at=_naive_utc(started_at),
+                completed_at=_naive_utc(completed_at),
             )
             self._session.add(erasure_job)
             await self._session.flush()
@@ -410,3 +425,12 @@ class TenantRepository:
             yield
         finally:
             await reset_tenant_context(self._session)
+
+
+def _naive_utc(value: datetime | None) -> datetime | None:
+    """Convert an aware datetime to naive UTC; pass through naive datetimes."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
