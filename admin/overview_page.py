@@ -26,11 +26,14 @@ from typing import Any
 import httpx
 import streamlit as st
 
-from admin._admin_http import http_client as _http_client, signed_in_tenant_id
+from admin._admin_http import (
+    PLACEHOLDER as _PLACEHOLDER,
+    http_client as _http_client,
+    render_placeholder_caption,
+    signed_in_tenant_id,
+)
 from admin._kpi import render_kpi_row
 from admin.auth_state import get_tenant_id
-
-_PLACEHOLDER = "—"
 
 
 def _get_json(path: str) -> tuple[Any, bool]:
@@ -140,8 +143,7 @@ def render() -> None:
     )
 
     if any_placeholder:
-        st.caption(
-            "(placeholder) — one or more backend endpoints were unavailable; "
-            "the affected cards show "
-            f"`{_PLACEHOLDER}` until the service responds."
+        render_placeholder_caption(
+            "one or more backend endpoints were unavailable; "
+            f"the affected cards show `{_PLACEHOLDER}` until the service responds."
         )

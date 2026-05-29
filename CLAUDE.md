@@ -265,14 +265,14 @@ Do not build ahead of the requested phase.
 <!-- SPECKIT START -->
 ## Active Spec-Kit Feature
 
-For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/009-concierge-ui/plan.md](specs/009-concierge-ui/plan.md).
+For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/010-fe-be-integration/plan.md](specs/010-fe-be-integration/plan.md).
 
 Related artifacts:
-- [specs/009-concierge-ui/spec.md](specs/009-concierge-ui/spec.md)
-- [specs/009-concierge-ui/research.md](specs/009-concierge-ui/research.md)
-- [specs/009-concierge-ui/data-model.md](specs/009-concierge-ui/data-model.md)
-- [specs/009-concierge-ui/contracts/](specs/009-concierge-ui/contracts/)
-- [specs/009-concierge-ui/quickstart.md](specs/009-concierge-ui/quickstart.md)
+- [specs/010-fe-be-integration/spec.md](specs/010-fe-be-integration/spec.md)
+- [specs/010-fe-be-integration/research.md](specs/010-fe-be-integration/research.md)
+- [specs/010-fe-be-integration/data-model.md](specs/010-fe-be-integration/data-model.md)
+- [specs/010-fe-be-integration/contracts/](specs/010-fe-be-integration/contracts/)
+- [specs/010-fe-be-integration/quickstart.md](specs/010-fe-be-integration/quickstart.md)
 
 Prior features (shipped):
 - [specs/001-widget-token-exchange/](specs/001-widget-token-exchange/)
@@ -283,4 +283,5 @@ Prior features (shipped):
 - [specs/006-ci-eval-gates/](specs/006-ci-eval-gates/)
 - [specs/007-cross-tenant-smoke-e2e/](specs/007-cross-tenant-smoke-e2e/)
 - [specs/008-demo-polish/](specs/008-demo-polish/)
+- [specs/009-concierge-ui/](specs/009-concierge-ui/)
 <!-- SPECKIT END -->

@@ -21,6 +21,7 @@ import streamlit as st
 from admin._admin_http import (
     TENANT_ID,
     http_client as _http_client,
+    render_placeholder_caption,
     signed_in_tenant_id,
 )
 
@@ -81,7 +82,7 @@ def _render_header(tenant: dict[str, Any], placeholder: bool) -> None:
     created_at = tenant.get("created_at", "—")
     st.markdown(f"### {name}")
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
     cols = st.columns(4)
     cols[0].markdown(f"**Slug**\n\n{slug}")
     cols[1].markdown(f"**Status**\n\n{status}")
@@ -92,7 +93,7 @@ def _render_header(tenant: dict[str, Any], placeholder: bool) -> None:
 def _render_audit_log(rows: list[dict[str, Any]], placeholder: bool) -> None:
     st.markdown("#### Recent audit log")
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
     table = [
         {
             "created_at": r.get("created_at", "—"),

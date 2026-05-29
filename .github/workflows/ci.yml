@@ -183,6 +183,18 @@ jobs:
           name: rag-eval-output
           path: rag-eval.json
 
+  # PROMPT-CHANGE GATE (T092). This job is the required check for any change
+  # to the agent path or prompt files. The on.pull_request trigger above
+  # already runs the job on every PR; the path list below enumerates the
+  # files whose modification is REQUIRED to be gated by this eval. The
+  # threshold (eval_thresholds.yaml::agent_tool_selection.accuracy_min)
+  # enforces pass/fail. Do not weaken this trigger without an updated
+  # decision in DECISIONS.md.
+  #
+  #   Protected paths:
+  #     - app/prompts/system_prompt.md
+  #     - app/prompts/loader.py
+  #     - app/agent/**
   agent-tool-eval:
     needs: lint-test-build
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
@@ -202,6 +214,20 @@ jobs:
           pip install uv
           uv pip install --system -e ".[dev]"
 
+      # Detect changes under the protected prompt/agent paths. The job runs
+      # on every PR (see if: above), but this step records which files moved
+      # so reviewers can confirm the gate covered the right surface.
+      - name: Detect protected-path changes
+        id: protected-paths
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            agent:
+              - 'app/prompts/system_prompt.md'
+              - 'app/prompts/loader.py'
+              - 'app/agent/**'
+
       # NOTE: three intentional spellings — agent_tool_selection (gate key in
       # eval_thresholds.yaml), evals.agent_tool (module), agent-tool-eval (job
       # name). Not a typo. See specs/006-ci-eval-gates/data-model.md E1.
@@ -217,6 +243,18 @@ jobs:
         with:
           name: agent-tool-eval-output
           path: agent-tool-eval.json
+
+      # SC-003 (task T062b): informational distribution check — never blocks merge.
+      - name: Run router distribution check (SC-003, informational)
+        continue-on-error: true
+        run: python -m evals.router_distribution --output router-distribution.json
+
+      - name: Upload router distribution output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: router-distribution-output
+          path: router-distribution.json
 
   red-team:
     needs: lint-test-build

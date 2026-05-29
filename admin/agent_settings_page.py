@@ -21,7 +21,11 @@ from typing import Any
 import httpx
 import streamlit as st
 
-from admin._admin_http import http_client as _http_client, signed_in_tenant_id
+from admin._admin_http import (
+    http_client as _http_client,
+    render_placeholder_caption,
+    signed_in_tenant_id,
+)
 from admin.auth_state import get_tenant_id
 
 _TONE_OPTIONS = ["professional", "friendly", "casual", "formal", "concierge"]
@@ -99,7 +103,7 @@ def _chips_locally_valid(chips: list[str]) -> bool:
 def render() -> None:
     config, placeholder = _fetch_config()
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
 
     persona = st.text_input(
         "Persona name", value=config.get("persona_name", ""), key="persona_input"

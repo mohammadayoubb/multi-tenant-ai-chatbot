@@ -9,6 +9,9 @@ from typing import Any
 
 import hvac  # type: ignore[import-untyped]
 
+LLM_ANTHROPIC_KEY_PATH = "secret/data/llm/anthropic_api_key"
+LLM_GROQ_KEY_PATH = "secret/data/llm/groq_api_key"
+
 
 class VaultSecretError(RuntimeError):
     """Raised when Vault cannot return a required secret."""
@@ -42,3 +45,34 @@ class VaultClient:
         if isinstance(nested_payload, dict):
             return nested_payload
         return payload
+
+    def resolve_anthropic_api_key(self) -> str:
+        """Return the Anthropic API key seeded at ``LLM_ANTHROPIC_KEY_PATH``.
+
+        Kept for rollback only — DECISION 19b (revised) selects Groq as the
+        live LLM provider. The path stays seeded so a redeploy can revert
+        without touching Vault again. Raises :class:`VaultSecretError` if the
+        path is missing or the ``anthropic_api_key`` field is empty.
+        """
+        payload = self.read_secret(LLM_ANTHROPIC_KEY_PATH)
+        key = payload.get("anthropic_api_key")
+        if not isinstance(key, str) or not key:
+            raise VaultSecretError(
+                f"anthropic_api_key missing or empty at {LLM_ANTHROPIC_KEY_PATH}"
+            )
+        return key
+
+    def resolve_groq_api_key(self) -> str:
+        """Return the Groq API key seeded at ``LLM_GROQ_KEY_PATH``.
+
+        Live LLM credential for the Track-2 agent loop (DECISION 19b revised).
+        Raises :class:`VaultSecretError` if the path is missing or the
+        ``groq_api_key`` field is empty.
+        """
+        payload = self.read_secret(LLM_GROQ_KEY_PATH)
+        key = payload.get("groq_api_key")
+        if not isinstance(key, str) or not key:
+            raise VaultSecretError(
+                f"groq_api_key missing or empty at {LLM_GROQ_KEY_PATH}"
+            )
+        return key

@@ -104,6 +104,49 @@ class TenantRepository:
         )
         return list(result.scalars().all())
 
+    async def list_for_manager(self) -> list[Tenant]:
+        """Alias for :meth:`list_all` — contract name (010 task T013)."""
+        return await self.list_all()
+
+    async def list_all_audit_logs(
+        self,
+        *,
+        since: str | None = None,
+        until: str | None = None,
+        actor_role: str | None = None,
+        tenant_id: UUID | None = None,
+        action: str | None = None,
+    ) -> list[AuditLog]:
+        """Contract-named platform-wide audit-log feed (010 task T013).
+
+        Thin wrapper over :meth:`list_audit_logs_platform_scope` so callers
+        can use the names from the 010 task spec without learning the legacy
+        ``actor`` / ``date_from`` / ``date_to`` parameter names. ``actor_role``
+        is matched against ``audit_logs.actor_role``.
+        """
+        from sqlalchemy import select
+
+        stmt = select(AuditLog)
+        if actor_role:
+            stmt = stmt.where(AuditLog.actor_role == actor_role)
+        if tenant_id is not None:
+            stmt = stmt.where(AuditLog.tenant_id == tenant_id)
+        if action:
+            stmt = stmt.where(AuditLog.action == action)
+        if since:
+            try:
+                stmt = stmt.where(AuditLog.created_at >= datetime.fromisoformat(since))
+            except ValueError:
+                pass
+        if until:
+            try:
+                stmt = stmt.where(AuditLog.created_at <= datetime.fromisoformat(until))
+            except ValueError:
+                pass
+        stmt = stmt.order_by(AuditLog.created_at.desc()).limit(500)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_audit_logs_platform_scope(
         self,
         *,

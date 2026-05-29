@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 import streamlit as st
 
-from admin._admin_http import http_client as _http_client
+from admin._admin_http import http_client as _http_client, render_placeholder_caption
 from admin._status_pill import render_status
 from admin._table import render_table
 
@@ -80,7 +80,7 @@ def _fetch_leads() -> tuple[list[dict[str, Any]], bool]:
 def render() -> None:
     leads, placeholder = _fetch_leads()
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
 
     selected_status = st.selectbox(
         "Filter by status", _STATUS_OPTIONS, key="leads_status_filter"

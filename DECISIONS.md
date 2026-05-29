@@ -468,3 +468,39 @@ Decision: Introduce a bubble launcher as a new UX state. The iframe loader (`fro
 Consequences: First-time visitors see the brand-coloured bubble only — chat history is empty under it, so the EmptyState renders only after they click. Reduced-motion is respected (all transitions gated on `prefers-reduced-motion: no-preference`). The 80×80 collapsed size matches Intercom's launcher footprint, so the visual integration with tenant sites stays familiar. The vitest axe-core scan (T103) runs both open and closed states and reports zero serious/critical violations.
 
 References: specs/009-concierge-ui/research.md R2, R8; specs/009-concierge-ui/spec.md SC-005; specs/009-concierge-ui/tasks.md T105–T112.
+
+## Decision 19b — LLM provider for the Track-2 agent loop = Groq Llama 3.3 70B Versatile (Amer, 2026-05-29; revised in-feature)
+
+Context: Feature 010 Track 2 graduates the deterministic stub in [app/agent/agent.py](app/agent/agent.py) into a real tool-calling LLM loop bounded at 5 iterations / 4000 tokens. The spec deliberately deferred the LLM vendor choice to research ([specs/010-fe-be-integration/research.md §R1](specs/010-fe-be-integration/research.md)); the deferral was first resolved to Anthropic Claude and is hereby revised to Groq before Phase B'3 (T058) landed in code.
+
+Decision: Groq Cloud, model `llama-3.3-70b-versatile`, via the official `groq` Python SDK (`AsyncGroq`), with OpenAI-compatible tool-calling. Companion defaults committed in the same Phase-1 setup:
+
+- `ROUTER_CONFIDENCE_THRESHOLD = 0.70` — the env-tunable floor below which the router fails over to the agent. Empirically grounded in the existing ONNX classifier eval (macro-F1 = 0.9752); 0.70 is the inflection point at which false-positive workflow routes start trending upward. Per research §R2.
+- `capture_lead` per-session rate limit default = `5 writes / 1-hour rolling window`, keyed `lead:{tenant_id}:{session_id}`, overridable per tenant via the new `tenant_settings.rate_limit_lead_per_session` column added in migration 0006 (T007). In-process backing store, same model as the existing widget-token IP bucket. Per research §R6.
+- Groq API key is resolved through the existing Vault adapter at the new path `secret/data/llm/groq_api_key` — no `.env` surface, no second secret-management mechanism. The legacy `secret/data/llm/anthropic_api_key` path stays seeded for rollback and is exposed via a parallel resolver with no live caller.
+
+Rationale (revised):
+- Groq's chat-completions endpoint exposes OpenAI-style tool-calling (`tools=[...]` + `tool_choice="auto"`), which maps cleanly to the bounded-agent pattern (FR-018, FR-019). Each turn returns `message.tool_calls`; the loop inspects them for cap enforcement.
+- `llama-3.3-70b-versatile` is the current high-capability tool-calling model on Groq (128k context, native function-calling) — meets the same tool-selection-accuracy bar (SC-006) at materially lower per-token cost and lower P50 latency than hosted Sonnet 4.6, which helps SC-008.
+- The `groq` SDK pulls only `httpx` + `distro` + `sniffio` (< 1 MB runtime footprint) and lives in the `api` container only. The lean-image audit ([scripts/check_lean_images.sh](scripts/check_lean_images.sh)) targets `modelserver` and `guardrails` only — Principle V unaffected.
+
+Alternatives considered:
+- Anthropic Claude Sonnet 4.6 (the prior choice) — rejected on cost + latency; the Track-2 bound (5 iters × 4000 tok) means the loop pays hosted Sonnet pricing on every ambiguous turn.
+- OpenAI function-calling — equivalent technical fit; rejected for simplicity (Principle VII) to avoid carrying a second SDK.
+- Local Llama via Ollama — rejected; would pull a heavy runtime into the `api` container and breach the spirit of Principle V.
+- Stay deterministic (current stub) — rejected per blueprint floor; the stub does not satisfy the user-observable Track-2 success criteria (SC-006, SC-007, SC-008).
+
+Consequences: A new dependency (`groq >= 0.11`) lands in `pyproject.toml` `[project.dependencies]`. The Vault seeding flow gains one path (`secret/data/llm/groq_api_key`); production deployments must populate it before Phase B'3 ships. The `anthropic` dependency stays for rollback only — no live import after T058 lands. The `ROUTER_CONFIDENCE_THRESHOLD` and `rate_limit_lead_per_session` defaults take effect when their Phase 2 code seams land (T047, T019). Audit metadata records `model="llama-3.3-70b-versatile"` so per-tenant cost rollups remain attributable.
+
+References: specs/010-fe-be-integration/research.md §R1, §R2, §R3, §R6; specs/010-fe-be-integration/tasks.md T002, T003, T004, T019, T047, T058; specs/010-fe-be-integration/plan.md Technical Context.
+
+## Decision 19a — Feature 010 cross-phase scope sanctioned as explicit team agreement (Amer, 2026-05-29)
+
+Context: Feature 010 (frontend / backend integration retrofit) spans Phase 4 (classifier router), Phase 5 (agent loop + tools + memory + prompts), and Phase 8 (admin UI) in a single bundled effort. Constitution Principle VI ("Phased Build") permits work outside the current phase only with **explicit team agreement** before merge. The two load-bearing seams that force the bundling are (a) `EscalationRepository.create()` — `escalate` tool (Phase 5) and `PATCH /escalations/{id}` (Phase 8) both depend on it — and (b) `tenant_agent_configs` GET/PUT — the prompt loader (Phase 5), the widget chips fetch (Phase 7/8), and the Agent admin tab (Phase 8) all consume it.
+
+Decision: The cross-phase bundling is sanctioned. The team agreement that Principle VI requires is recorded by (1) the user's approval of [backend-spec.md](backend-spec.md) Track 1 + Track 2 scope on 2026-05-29; (2) the user's approval of the spec-kit analysis remediation set on 2026-05-29 (this decision is part of that remediation); (3) the precedent set by DECISION 17 (Phase 2A bundling inside feature 009, sanctioned by the same project-lead authority). Work order discipline is preserved *within* the bundle: Phase 2 Foundational lands first (migrations + `EscalationRepository.create()` + `tenant_agent_configs` GET/PUT); user-story phases then proceed in parallel without crossing each other's owned files. Per-PR reviewers asked "why does this PR span Phases 4/5/8?" cite this decision.
+
+Consequences: A single feature delivers the integration plus the agent retrofit instead of three sequential features with placeholder seams between them. The plan's [Complexity Tracking](specs/010-fe-be-integration/plan.md) row documents the violation; this decision is the qualifying "explicit team agreement". If a future cross-phase feature is proposed without comparable seam-sharing, this decision is NOT a blanket waiver — Principle VI still applies and a fresh agreement must be recorded.
+
+References: specs/010-fe-be-integration/plan.md Complexity Tracking; specs/010-fe-be-integration/spec.md User Story 2 + User Story 4; backend-spec.md Track 1 + Track 2; DECISION 17 (precedent).
+

@@ -26,7 +26,7 @@ from typing import Any
 import httpx
 import streamlit as st
 
-from admin._admin_http import http_client as _http_client
+from admin._admin_http import http_client as _http_client, render_placeholder_caption
 from admin._empty import render_empty_state
 from admin._status_pill import render_status
 from admin._table import render_table
@@ -258,7 +258,7 @@ def _render_view_metadata(tenants: list[dict[str, Any]]) -> None:
 def render() -> None:
     tenants, placeholder = _fetch_tenants()
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
 
     _render_table(tenants)
     _render_view_metadata(tenants)

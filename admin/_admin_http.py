@@ -18,8 +18,14 @@ from __future__ import annotations
 import os
 
 import httpx
+import streamlit as st
 
 from admin.auth_state import get_actor_id, get_role, get_tenant_id, get_token
+
+# Display placeholder for a missing scalar value when the backend is
+# unreachable. Lives here (T100) so the 10 admin pages share one source of
+# truth instead of redeclaring `_PLACEHOLDER = "—"` per file.
+PLACEHOLDER = "—"
 
 # Demo tenant id matching the InMemoryWidgetRepository fixture; used only in
 # `_SAMPLE_*` placeholder dicts when the backend is unreachable.
@@ -51,6 +57,19 @@ def http_client() -> httpx.Client:
     if actor_id:
         headers["X-Actor-ID"] = actor_id
     return httpx.Client(base_url=backend_url(), headers=headers, timeout=10.0)
+
+
+def render_placeholder_caption(detail: str | None = None) -> None:
+    """Render the canonical "(placeholder)" caption.
+
+    Per FR-013: when a fetch fails the page degrades to canned content with a
+    visible "(placeholder)" caption — never a raw error. `detail` adds a hint
+    for the operator (e.g. "one or more backend endpoints were unavailable").
+    """
+    text = "(placeholder)"
+    if detail:
+        text = f"(placeholder) — {detail}"
+    st.caption(text)
 
 
 def signed_in_tenant_id() -> str:

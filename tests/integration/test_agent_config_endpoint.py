@@ -182,7 +182,9 @@ def test_put_roundtrips_and_emits_audit_event(setup):
     assert out["persona_name"] == "Acme Concierge"
     assert out["chips"] == ["Pricing", "Hours"]
     assert TENANT_A in agent_repo.rows
-    assert any(e["action"] == "agent_config_updated" for e in tenant_repo.audit_events)
+    assert any(
+        e["action"] == "tenant.agent_config_updated" for e in tenant_repo.audit_events
+    )
 
 
 def test_put_rejects_more_than_six_chips(setup):

@@ -142,7 +142,7 @@ class AgentConfigService:
             tenant_id=tenant_id,
             actor_id=actor.actor_id,
             actor_role=actor.role,
-            action="agent_config_updated",
+            action="tenant.agent_config_updated",
             metadata={
                 "chip_count": len(validated.chips),
                 "tone": validated.tone,

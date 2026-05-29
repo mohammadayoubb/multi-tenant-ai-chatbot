@@ -21,7 +21,11 @@ from typing import Any
 import httpx
 import streamlit as st
 
-from admin._admin_http import http_client as _http_client, signed_in_tenant_id
+from admin._admin_http import (
+    http_client as _http_client,
+    render_placeholder_caption,
+    signed_in_tenant_id,
+)
 from admin.brand import COLORS, RADIUS
 
 _REFUSAL_TONE_OPTIONS = ["polite", "firm", "neutral", "apologetic"]
@@ -205,7 +209,7 @@ def _render_tenant_section(snapshot: dict[str, Any]) -> None:
 def render() -> None:
     snapshot, placeholder = _fetch_snapshot()
     if placeholder:
-        st.caption("(placeholder)")
+        render_placeholder_caption()
 
     rules = snapshot.get("platform_rules") or []
     if not isinstance(rules, list):
