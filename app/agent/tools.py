@@ -87,10 +87,7 @@ def build_rag_answer(query: str, chunks: list[dict[str, object]]) -> str:
 
     cleaned_query = query.strip()
     if not chunks:
-        return (
-            "I could not find this in the tenant's published content. "
-            "I can escalate this to a human if you want."
-        )
+        return "I don't have this information."
 
     selected_chunks = chunks[:3]
     answer_parts: list[str] = []
@@ -105,10 +102,7 @@ def build_rag_answer(query: str, chunks: list[dict[str, object]]) -> str:
         answer_parts.append(f"{index}. From {source}: {snippet}")
 
     if not answer_parts:
-        return (
-            "I found tenant content, but it did not contain enough readable text "
-            "to answer safely. I can escalate this to a human if needed."
-        )
+        return "I don't have this information."
 
     intro = "Based on the tenant's published content"
     if cleaned_query:

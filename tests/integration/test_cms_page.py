@@ -62,6 +62,10 @@ def test_happy_path_renders_all_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     at = AppTest.from_file(_ENTRY)
     at.run(timeout=10)
+    # The default filter is "published" so we set "all" to verify every
+    # backend row surfaces in the UI when the user opts in.
+    at.selectbox(key="cms_status_filter").set_value("all")
+    at.run(timeout=10)
     assert not at.exception
     assert len(at.dataframe) == 1
     rendered = at.dataframe[0].value

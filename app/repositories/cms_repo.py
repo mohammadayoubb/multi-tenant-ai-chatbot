@@ -56,6 +56,10 @@ class CmsRepository:
         )
         self._session.add(page)
         await self._session.flush()
+        # Load server-computed defaults (created_at, updated_at) into the
+        # instance so the caller can read them synchronously without
+        # triggering an async lazy-load outside greenlet context.
+        await self._session.refresh(page)
         return page
 
     async def get(self, page_id: UUID) -> CmsPage | None:
@@ -84,6 +88,10 @@ class CmsRepository:
             if field_name in body:
                 setattr(page, field_name, body[field_name])
         await self._session.flush()
+        # `updated_at` has onupdate=func.now() server-side; refresh so the
+        # caller (e.g. `_to_payload`) doesn't trigger a lazy-load outside
+        # the async greenlet context (sqlalchemy MissingGreenlet).
+        await self._session.refresh(page)
         return page
 
     async def set_status(
@@ -94,6 +102,7 @@ class CmsRepository:
             return None
         page.status = status
         await self._session.flush()
+        await self._session.refresh(page)
         return page
 
     async def soft_delete(self, page_id: UUID, tenant_id: UUID) -> bool:

@@ -37,6 +37,7 @@ export interface ChatMessage {
   ticket_id?: string | null;
   citations?: Citation[] | unknown[];
   route?: string;
+  used_tools?: string[];
 }
 
 export interface AgentConfig {

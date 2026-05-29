@@ -32,6 +32,10 @@ export default defineConfig({
         target: process.env.VITE_API_TARGET ?? "http://api:8000",
         changeOrigin: false,
       },
+      "/tenants": {
+        target: process.env.VITE_API_TARGET ?? "http://api:8000",
+        changeOrigin: false,
+      },
     },
   },
 });

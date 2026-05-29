@@ -38,3 +38,22 @@ class LeadRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def get(self, lead_id: UUID) -> Lead | None:
+        result = await self._session.execute(select(Lead).where(Lead.id == lead_id))
+        return result.scalar_one_or_none()
+
+    async def set_status(
+        self, lead_id: UUID, tenant_id: UUID, status: str
+    ) -> Lead | None:
+        """Tenant-scoped status update. Returns None on cross-tenant miss."""
+        lead = await self.get(lead_id)
+        if lead is None or lead.tenant_id != tenant_id:
+            return None
+        lead.status = status
+        await self._session.flush()
+        # `updated_at` has onupdate=func.now() server-side; refresh so the
+        # caller can read it without triggering an async lazy-load outside
+        # the greenlet context.
+        await self._session.refresh(lead)
+        return lead

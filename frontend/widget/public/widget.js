@@ -72,6 +72,7 @@
       // message when its open/closed state changes; the loader adjusts the
       // iframe accordingly so the bubble doesn't eat host-page clicks.
       var iframeOrigin = new URL(iframe.src).origin;
+      var MOBILE_BREAKPOINT = 640;
       window.addEventListener("message", function (event) {
         if (event.source !== iframe.contentWindow) return;
         if (event.origin !== iframeOrigin) return;
@@ -79,7 +80,11 @@
         if (!data || data.type !== "concierge.widget.resize") return;
         var width = typeof data.width === "number" ? data.width : 80;
         var height = typeof data.height === "number" ? data.height : 80;
-        if (data.mode === "mobile") {
+        // Mobile decision is made HERE using the host viewport. The iframe
+        // can't read host width — its `window.innerWidth` reflects the
+        // iframe's own size, which is tiny when collapsed.
+        var hostIsMobile = window.innerWidth < MOBILE_BREAKPOINT;
+        if (data.mode === "open" && hostIsMobile) {
           iframe.style.right = "0";
           iframe.style.bottom = "0";
           iframe.style.width = "100vw";

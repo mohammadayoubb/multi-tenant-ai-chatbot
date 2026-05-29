@@ -11,7 +11,7 @@ the query.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,8 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import TenantAdminContext, require_admin_session
 from app.db.session import get_session
 from app.repositories.lead_repo import LeadRepository
+from app.repositories.tenant_repo import TenantRepository
 
 router = APIRouter(prefix="/leads", tags=["leads"])
+
+LeadStatus = Literal["captured", "qualified", "spam"]
 
 
 class LeadResponse(BaseModel):
@@ -33,6 +36,10 @@ class LeadResponse(BaseModel):
     intent: str
     status: str
     quality_score: float | None
+
+
+class LeadStatusPatch(BaseModel):
+    status: LeadStatus
 
 
 @router.get("", response_model=list[LeadResponse])
@@ -61,3 +68,40 @@ async def list_leads(
         )
         for r in rows
     ]
+
+
+@router.patch("/{lead_id}", response_model=LeadResponse)
+async def patch_lead_status(
+    lead_id: UUID,
+    body: LeadStatusPatch,
+    admin: Annotated[TenantAdminContext | None, Depends(require_admin_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> LeadResponse:
+    """Update one lead's status. Tenant-scoped via the admin JWT."""
+    if admin is None:
+        raise HTTPException(status_code=403, detail="forbidden")
+    if admin.role == "tenant_manager":
+        raise HTTPException(status_code=403, detail="forbidden")
+    repo = LeadRepository(session)
+    lead = await repo.set_status(lead_id, admin.tenant_id, body.status)
+    if lead is None:
+        raise HTTPException(status_code=404, detail="not_found")
+    try:
+        await TenantRepository(session).add_audit_log(
+            tenant_id=admin.tenant_id,
+            actor_id=admin.actor_id,
+            actor_role=admin.role,
+            action="lead.status_changed",
+            metadata={"lead_id": str(lead.id), "new_status": body.status},
+        )
+    except Exception:  # pragma: no cover - audit must not break the action
+        pass
+    return LeadResponse(
+        id=lead.id,
+        created_at=lead.created_at,
+        name=lead.name,
+        contact=lead.contact,
+        intent=lead.intent,
+        status=lead.status,
+        quality_score=lead.quality_score,
+    )

@@ -69,12 +69,9 @@ body,
  * ------------------------------------------------------------------------- */
 
 .widget-shell {
-  width: 360px;
-  height: 540px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-shell);
-  box-shadow: var(--shadow-card);
+  width: 100%;
+  height: 100%;
+  background: transparent;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -413,6 +410,39 @@ body,
     transform: translateY(-3px);
     opacity: 1;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Tool chips (used_tools on assistant message)
+ * ------------------------------------------------------------------------- */
+
+.tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-self: flex-start;
+  margin-top: 0.3rem;
+}
+
+.tool-chip {
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: var(--c-ticket-bg, #eef2ff);
+  color: var(--c-ticket-text, #3730a3);
+  border: 1px solid var(--c-ticket-border, #c7d2fe);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.tool-chip[data-tool="rag_search"]::before {
+  content: "🔍 ";
+}
+.tool-chip[data-tool="capture_lead"]::before {
+  content: "📇 ";
+}
+.tool-chip[data-tool="escalate"]::before {
+  content: "🙋 ";
 }
 
 /* ---------------------------------------------------------------------------

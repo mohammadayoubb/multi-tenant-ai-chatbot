@@ -268,7 +268,8 @@ def _render_delete_controls(page: dict[str, Any]) -> None:
         code = _delete_page(page_id)
         st.session_state.pop(confirm_key, None)
         if code in (200, 204):
-            st.success("Page deleted.")
+            st.session_state.pop("cms_detail_select", None)
+            st.success("Page archived (removed from RAG).")
             st.rerun()
         else:
             _surface_error(code, None)
@@ -285,7 +286,10 @@ def render() -> None:
     _render_create_form()
 
     selected_status = st.selectbox(
-        "Filter by status", _STATUS_OPTIONS, key="cms_status_filter"
+        "Filter by status",
+        _STATUS_OPTIONS,
+        index=_STATUS_OPTIONS.index("published"),
+        key="cms_status_filter",
     )
     if selected_status != "all":
         filtered = [p for p in pages if p.get("status") == selected_status]

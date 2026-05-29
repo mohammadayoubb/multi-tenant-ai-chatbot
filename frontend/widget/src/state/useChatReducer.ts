@@ -113,6 +113,7 @@ function buildAssistantMessage(reply: ChatResponse): ChatMessage {
       reply.route === "escalate" && reply.ticket_id ? reply.ticket_id : null,
     citations: Array.isArray(reply.citations) ? reply.citations : [],
     route: reply.route,
+    used_tools: Array.isArray(reply.used_tools) ? reply.used_tools : [],
   };
 }
 

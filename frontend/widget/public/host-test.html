@@ -8,35 +8,262 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Concierge widget host test</title>
+    <title>Acme — Concierge widget demo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      body {
-        font-family: system-ui, sans-serif;
-        max-width: 40rem;
-        margin: 3rem auto;
-        padding: 0 1rem;
-        color: #222;
+      :root {
+        --bg: #0f172a;
+        --surface: #ffffff;
+        --surface-alt: #f8fafc;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --text-muted: #475569;
+        --text-soft: #64748b;
+        --brand: #4f46e5;
+        --brand-soft: #eef2ff;
+        --shadow:
+          0 12px 32px -8px rgba(15, 23, 42, 0.18),
+          0 2px 6px -2px rgba(15, 23, 42, 0.08);
+        --radius: 14px;
+        --font:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--surface-alt);
+        color: var(--text);
+        font-family: var(--font);
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .topbar {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 1rem 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-weight: 700;
+        font-size: 1.05rem;
+      }
+
+      .brand-mark {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+        letter-spacing: 0.02em;
+      }
+
+      .nav {
+        display: flex;
+        gap: 1.4rem;
+        font-size: 0.92rem;
+        color: var(--text-muted);
+      }
+
+      .nav a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .nav a:hover { color: var(--brand); }
+
+      .container {
+        max-width: 56rem;
+        margin: 0 auto;
+        padding: 3.5rem 2rem 6rem;
+      }
+
+      .hero {
+        text-align: center;
+        margin-bottom: 3rem;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--brand);
+        background: var(--brand-soft);
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        margin-bottom: 1rem;
+      }
+
+      .hero h1 {
+        font-size: clamp(1.9rem, 4vw, 2.6rem);
+        line-height: 1.15;
+        margin: 0 0 0.9rem;
+        letter-spacing: -0.01em;
+      }
+
+      .hero p {
+        font-size: 1.05rem;
+        color: var(--text-muted);
+        max-width: 36rem;
+        margin: 0 auto;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+        gap: 1rem;
+        margin-top: 2.5rem;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.25rem 1.25rem 1.1rem;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      }
+
+      .card h3 {
+        margin: 0 0 0.4rem;
+        font-size: 0.95rem;
+        letter-spacing: 0.01em;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.88rem;
+        line-height: 1.5;
+      }
+
+      .card .tag {
+        display: inline-block;
+        font-size: 0.65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--brand);
+        background: var(--brand-soft);
+        padding: 0.15rem 0.45rem;
+        border-radius: 6px;
+        margin-bottom: 0.55rem;
+      }
+
+      .hint {
+        margin-top: 3rem;
+        padding: 1rem 1.25rem;
+        background: var(--surface);
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+        color: var(--text-soft);
+        font-size: 0.85rem;
+        text-align: center;
+      }
+
+      .hint strong { color: var(--text); }
+
+      kbd {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.78rem;
+        background: var(--surface-alt);
+        border: 1px solid var(--border);
+        border-bottom-width: 2px;
+        border-radius: 5px;
+        padding: 0.05rem 0.4rem;
+      }
+
+      footer {
+        text-align: center;
+        font-size: 0.78rem;
+        color: var(--text-soft);
+        padding: 1.5rem 2rem;
+      }
+
+      @media (max-width: 640px) {
+        .topbar { padding: 0.85rem 1rem; }
+        .nav { display: none; }
+        .container { padding: 2.5rem 1rem 5rem; }
       }
     </style>
   </head>
   <body>
-    <h1>Concierge widget host test</h1>
-    <p>
-      This page simulates a tenant's site loading the production widget loader.
-      You should see the chat widget pinned to the bottom-right corner.
-    </p>
-    <p>
-      DevTools &rarr; Elements should show exactly one
-      <code>&lt;iframe data-concierge-widget-id="w_demo"&gt;</code> under
-      <code>&lt;body&gt;</code>, and the Console should be free of loader
-      errors.
-    </p>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">A</span>
+        <span>Acme&nbsp;Bakery</span>
+      </div>
+      <nav class="nav" aria-label="Primary">
+        <a href="#">Menu</a>
+        <a href="#">Locations</a>
+        <a href="#">Catering</a>
+        <a href="#">Contact</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      <section class="hero">
+        <span class="eyebrow">Concierge widget demo</span>
+        <h1>Talk to our team — instantly.</h1>
+        <p>
+          This is a mock tenant site running the production Concierge loader.
+          The chat bubble pinned to the bottom-right uses the same code path a
+          real customer would embed.
+        </p>
+      </section>
+
+      <section class="cards" aria-label="Things to try">
+        <div class="card">
+          <span class="tag">RAG</span>
+          <h3>Ask about opening hours</h3>
+          <p>Try <em>"What are your opening hours?"</em> — the agent answers from the CMS and shows a citation.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Lead</span>
+          <h3>Drop a pricing inquiry</h3>
+          <p>Try <em>"I want pricing. My email is jane@example.com"</em> — captured to the Leads tab.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Escalate</span>
+          <h3>Hand off to a human</h3>
+          <p>Try <em>"Can I speak to a human?"</em> — opens a ticket and shows the pill on the reply.</p>
+        </div>
+      </section>
+
+      <p class="hint">
+        Click the bubble at the <strong>bottom-right</strong> to start. Hit
+        <kbd>Esc</kbd> to close the panel.
+      </p>
+    </main>
+
+    <footer>
+      © Acme Bakery — Concierge widget host test
+    </footer>
+
     <!--
       NOTE: do NOT add `async` to this tag. `document.currentScript` is null
       inside async classic scripts, and the loader uses currentScript to read
       its data-* attributes. Use a plain or `defer`d script tag instead.
     -->
-   <script src="http://api:8000/widget.js" data-widget-id="9a7e3a3a-1a8d-4f3a-9f06-2e2b9a8b1c6d" data-backend-url="http://api:8000" defer></script>
+    <script
+      src="/widget.js"
+      data-widget-id="9a7e3a3a-1a8d-4f3a-9f06-2e2b9a8b1c6d"
+      data-backend-url="http://localhost:5173"
+      defer
+    ></script>
   </body>
 </html>

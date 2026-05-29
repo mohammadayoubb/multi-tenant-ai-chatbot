@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -8,6 +9,23 @@ import pytest
 
 from app.rag import ingest
 from app.services.cms_pages import CmsActor, CmsPageService
+
+
+class _FakeSession:
+    """Minimal stand-in for AsyncSession used by CmsPageService RAG sync.
+
+    The service wraps ingest calls in `session.begin_nested()` so a failure
+    inside the index write rolls back only the savepoint. These tests don't
+    need real transaction semantics — they only need the context manager to
+    work — so `begin_nested` returns a no-op async context manager.
+    """
+
+    def begin_nested(self):
+        @asynccontextmanager
+        async def _noop():
+            yield
+
+        return _noop()
 
 
 @dataclass
@@ -73,7 +91,7 @@ async def test_cms_create_syncs_published_page_to_rag(monkeypatch) -> None:
 
     monkeypatch.setattr(ingest, "sync_cms_page_index", _sync)
     tenant_id = uuid4()
-    session = object()
+    session = _FakeSession()
     service = CmsPageService(_Repo(), _TenantRepo(), session)  # type: ignore[arg-type]
 
     payload = await service.create(
@@ -103,7 +121,7 @@ async def test_cms_update_and_status_change_resync_current_page(monkeypatch) -> 
     tenant_id = uuid4()
     repo = _Repo()
     tenant_repo = _TenantRepo()
-    service = CmsPageService(repo, tenant_repo, object())  # type: ignore[arg-type]
+    service = CmsPageService(repo, tenant_repo, _FakeSession())  # type: ignore[arg-type]
     actor = CmsActor(tenant_id=tenant_id, actor_id="admin@example.test", role="tenant_admin")
     page = await repo.create(
         tenant_id=tenant_id,
@@ -138,7 +156,7 @@ async def test_cms_delete_removes_page_from_rag(monkeypatch) -> None:
     monkeypatch.setattr(ingest, "delete_cms_page_chunks", _delete)
     tenant_id = uuid4()
     repo = _Repo()
-    service = CmsPageService(repo, _TenantRepo(), object())  # type: ignore[arg-type]
+    service = CmsPageService(repo, _TenantRepo(), _FakeSession())  # type: ignore[arg-type]
     actor = CmsActor(tenant_id=tenant_id, actor_id="admin@example.test", role="tenant_admin")
     page = await repo.create(
         tenant_id=tenant_id,

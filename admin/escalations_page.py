@@ -1,18 +1,18 @@
 # Owner: Amer
-"""Tenant Escalations admin page (Spec 009 US2, T075).
+"""Tenant Escalations admin page (Spec 009 US2, T075 — refreshed feature 010).
 
-Lists open / in-progress / resolved tickets for the signed-in tenant and lets
-a tenant admin change status or assign a ticket. The assignee dropdown is
+Lists pending / in-progress / resolved tickets for the signed-in tenant and
+lets a tenant admin change status or assign a ticket — both controls live
+inline on each table row alongside a status pill. The assignee dropdown is
 populated from `GET /tenants/{tid}/admin-users` so foreign-tenant assignees
-are impossible by construction — the dropdown only ever lists same-tenant
-users.
+are impossible by construction.
 
 Reads:
-- `GET /escalations` (T039e) — list of tickets scoped to the JWT tenant.
-- `GET /tenants/{tid}/admin-users` (T039g) — assignee pool.
+- `GET /escalations` — list of tickets scoped to the JWT tenant.
+- `GET /tenants/{tid}/admin-users` — assignee pool.
 
 Writes:
-- `PATCH /escalations/{id}` (T039e) — status + assignee_id update.
+- `PATCH /escalations/{id}` — status + assignee_id update.
 
 If either GET fails, the page falls back to placeholder rows / a disabled
 assignee dropdown. Mutation failures collapse to a generic "forbidden /
@@ -32,9 +32,12 @@ from admin._admin_http import (
     signed_in_tenant_id,
 )
 from admin._status_pill import render_status
-from admin._table import render_table
 
-_STATUS_OPTIONS = ["pending", "in_progress", "resolved", "closed"]
+# Mirrors the DB CHECK constraint `ck_escalation_tickets_status` exactly —
+# any other value will hit a 500 at the repository INSERT/UPDATE. `erased`
+# is reserved for GDPR erasure and is not user-selectable.
+_STATUS_OPTIONS = ["open", "in_progress", "resolved"]
+_PAGE_SIZE = 10
 
 _SAMPLE_TICKETS: list[dict[str, Any]] = [
     {
@@ -49,6 +52,17 @@ _SAMPLE_TICKETS: list[dict[str, Any]] = [
 
 _GENERIC_FORBIDDEN = "Forbidden — you do not have permission for that action."
 _GENERIC_FAILED = "The request failed; please retry."
+
+_COL_WEIGHTS = [2, 2, 4, 2, 2, 2, 1]
+_COL_HEADERS = (
+    "Opened",
+    "Ticket",
+    "Excerpt",
+    "Status",
+    "Change",
+    "Assignee",
+    "",
+)
 
 
 def _admin_users_url() -> str:
@@ -117,70 +131,83 @@ def _format_assignee_label(admin: dict[str, Any]) -> str:
     return str(name)
 
 
-def _render_table(tickets: list[dict[str, Any]]) -> None:
-    rows = [
-        {
-            "ticket_id": str(t.get("ticket_id", "—")),
-            "opened_at": t.get("opened_at", "—"),
-            "status": t.get("status", "—"),
-            "assignee": t.get("assignee_name") or "—",
-            "excerpt": t.get("last_message_excerpt", "—"),
-        }
-        for t in tickets
-    ]
-    render_table(
-        rows,
-        columns=["ticket_id", "opened_at", "status", "assignee", "excerpt"],
-        empty_state={
-            "title": "No escalations yet",
-            "message": "Tickets created by the agent's escalate tool will appear here.",
-        },
-        key="escalations_table",
-    )
-
-    # US4 / T115: render ticket-status pills below the table so the visual
-    # language matches tenants/invites/leads. Streamlit's dataframe cannot
-    # render colored chips inline.
-    if tickets:
-        st.markdown("#### Ticket status")
-        for t in tickets:
-            cols = st.columns([3, 2])
-            with cols[0]:
-                st.write(f"`{t.get('ticket_id', '—')}`")
-            with cols[1]:
-                render_status(str(t.get("status", "—")), kind="ticket")
+def _format_opened_at(value: Any) -> str:
+    text = str(value or "")
+    if "T" in text:
+        date_part, time_part = text.split("T", 1)
+        return f"{date_part} {time_part[:5]}"
+    return text or "—"
 
 
-def _render_ticket_controls(
+def _short_ticket(ticket_id: str) -> str:
+    """Display a short prefix for long UUID ticket ids."""
+    cleaned = ticket_id.strip()
+    if len(cleaned) <= 10:
+        return cleaned or "—"
+    return f"{cleaned[:8]}…"
+
+
+def _truncate(text: str, limit: int = 90) -> str:
+    cleaned = (text or "").strip()
+    if len(cleaned) <= limit:
+        return cleaned or "—"
+    return cleaned[: limit - 1].rstrip() + "…"
+
+
+def _escalations_page_prev() -> None:
+    current = int(st.session_state.get("escalations_page_idx", 0))
+    st.session_state["escalations_page_idx"] = max(0, current - 1)
+
+
+def _escalations_page_next(*, max_index: int) -> None:
+    current = int(st.session_state.get("escalations_page_idx", 0))
+    st.session_state["escalations_page_idx"] = min(max_index, current + 1)
+
+
+def _render_row(
     ticket: dict[str, Any],
     admins: list[dict[str, Any]],
     admin_endpoint_pending: bool,
+    placeholder: bool,
 ) -> None:
-    ticket_id = str(ticket.get("ticket_id"))
-    current_status = ticket.get("status") or _STATUS_OPTIONS[0]
+    ticket_id = str(ticket.get("ticket_id") or "")
+    current_status = str(ticket.get("status") or _STATUS_OPTIONS[0])
     status_options = list(_STATUS_OPTIONS)
     if current_status not in status_options:
         status_options = [current_status, *status_options]
 
-    st.markdown(f"#### Ticket `{ticket_id}`")
-    cols = st.columns(2)
-    with cols[0]:
+    cols = st.columns(_COL_WEIGHTS)
+    cols[0].write(_format_opened_at(ticket.get("opened_at")))
+    cols[1].markdown(f"`{_short_ticket(ticket_id)}`")
+    cols[2].write(_truncate(ticket.get("last_message_excerpt", ""), 100))
+    with cols[3]:
+        render_status(current_status, kind="ticket")
+
+    if placeholder or not ticket_id:
+        cols[4].write("—")
+        cols[5].write("—")
+        cols[6].write("")
+        return
+
+    with cols[4]:
         new_status = st.selectbox(
             "Status",
             status_options,
             index=status_options.index(current_status),
             key=f"status_select_{ticket_id}",
+            label_visibility="collapsed",
         )
-    with cols[1]:
+
+    with cols[5]:
         if admin_endpoint_pending or not admins:
             st.selectbox(
                 "Assignee",
-                ["(endpoint pending — assignee dropdown disabled)"],
+                ["(pending)"],
                 key=f"assignee_select_{ticket_id}",
                 disabled=True,
+                label_visibility="collapsed",
             )
-            st.caption("Assignee endpoint pending — selection disabled.")
-            new_assignee_id = ticket.get("assignee_id")
+            new_assignee_id: str | None = ticket.get("assignee_id")
         else:
             options: list[tuple[str | None, str]] = [(None, "Unassigned")]
             for admin in admins:
@@ -199,22 +226,24 @@ def _render_ticket_controls(
             selected = st.selectbox(
                 "Assignee",
                 options=list(range(len(options))),
-                format_func=lambda i: options[i][1],
+                format_func=lambda i, _opts=options: _opts[i][1],
                 index=current_idx,
                 key=f"assignee_select_{ticket_id}",
+                label_visibility="collapsed",
             )
             new_assignee_id = options[selected][0]
 
-    if st.button("Save", key=f"save_ticket_{ticket_id}", type="primary"):
-        payload: dict[str, Any] = {"status": new_status}
-        if not admin_endpoint_pending:
-            payload["assignee_id"] = new_assignee_id
-        status_code, _body = _patch_ticket(ticket_id, payload)
-        if status_code in (200, 204):
-            st.success("Ticket updated.")
-            st.rerun()
-        else:
-            _surface_error(status_code)
+    with cols[6]:
+        if st.button("Save", key=f"save_ticket_{ticket_id}", type="primary"):
+            payload: dict[str, Any] = {"status": new_status}
+            if not admin_endpoint_pending:
+                payload["assignee_id"] = new_assignee_id
+            status_code, _body = _patch_ticket(ticket_id, payload)
+            if status_code in (200, 204):
+                st.success("Ticket updated.")
+                st.rerun()
+            else:
+                _surface_error(status_code)
 
 
 def render() -> None:
@@ -229,10 +258,51 @@ def render() -> None:
             "until `/tenants/{tid}/admin-users` is shipped."
         )
 
-    _render_table(tickets)
-
     if not tickets:
+        st.info(
+            "No escalations yet. Tickets created by the agent's escalate tool "
+            "will appear here."
+        )
         return
 
-    for ticket in tickets:
-        _render_ticket_controls(ticket, admins, admin_endpoint_pending)
+    total = len(tickets)
+    total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
+    current_page = int(st.session_state.get("escalations_page_idx", 0))
+    current_page = max(0, min(current_page, total_pages - 1))
+    start = current_page * _PAGE_SIZE
+    end = start + _PAGE_SIZE
+    page_rows = tickets[start:end]
+
+    # Column header row inside a bordered container so the layout reads as
+    # a real table; each ticket row gets its own bordered container below.
+    with st.container(border=True):
+        header_cols = st.columns(_COL_WEIGHTS)
+        for col, label in zip(header_cols, _COL_HEADERS):
+            col.markdown(f"**{label}**")
+
+    for ticket in page_rows:
+        with st.container(border=True):
+            _render_row(ticket, admins, admin_endpoint_pending, placeholder)
+
+    if total_pages > 1:
+        nav_cols = st.columns([1, 1, 4])
+        with nav_cols[0]:
+            st.button(
+                "← Previous",
+                key="escalations_prev_page",
+                disabled=current_page == 0,
+                on_click=_escalations_page_prev,
+            )
+        with nav_cols[1]:
+            st.button(
+                "Next →",
+                key="escalations_next_page",
+                disabled=current_page >= total_pages - 1,
+                on_click=_escalations_page_next,
+                kwargs={"max_index": total_pages - 1},
+            )
+        with nav_cols[2]:
+            st.caption(
+                f"Page {current_page + 1} of {total_pages} — "
+                f"showing {start + 1}–{min(end, total)} of {total}"
+            )

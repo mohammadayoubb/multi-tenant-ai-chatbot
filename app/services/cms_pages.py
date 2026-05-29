@@ -19,6 +19,7 @@ Validation policy:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -29,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.cms_repo import CmsRepository
 from app.repositories.tenant_repo import TenantRepository
 
+LOGGER = logging.getLogger(__name__)
 
 _ALLOWED_STATUSES = ("draft", "published", "archived")
 
@@ -168,22 +170,38 @@ class CmsPageService:
         await self._delete_page_index(page.tenant_id, page_id)
 
     async def _sync_page_index(self, page: Any) -> None:
-        """Write the page's current state to the RAG index."""
+        """Write the page's current state to the RAG index.
+
+        RAG sync is a best-effort side-effect of the CMS mutation: failure
+        here must NOT roll back the user's publish/edit/delete. The work is
+        wrapped in a SAVEPOINT so a pgvector / RLS / FK error inside the
+        ingest call rolls back only the index writes, leaving the outer
+        transaction (cms_pages UPDATE + audit_log INSERT) committable.
+        """
 
         if self._session is None:
             return
 
         from app.rag.ingest import sync_cms_page_index
 
-        await sync_cms_page_index(
-            self._session,
-            tenant_id=page.tenant_id,
-            page_id=page.id,
-            text=page.body,
-            source_title=page.title,
-            source_url=page.source_url,
-            status=page.status,
-        )
+        try:
+            async with self._session.begin_nested():
+                await sync_cms_page_index(
+                    self._session,
+                    tenant_id=page.tenant_id,
+                    page_id=page.id,
+                    text=page.body,
+                    source_title=page.title,
+                    source_url=page.source_url,
+                    status=page.status,
+                )
+        except Exception:
+            LOGGER.warning(
+                "rag_index_sync_failed tenant_id=%s page_id=%s",
+                page.tenant_id,
+                page.id,
+                exc_info=True,
+            )
 
     async def _delete_page_index(self, tenant_id: UUID, page_id: UUID) -> None:
         if self._session is None:
@@ -191,11 +209,20 @@ class CmsPageService:
 
         from app.rag.ingest import delete_cms_page_chunks
 
-        await delete_cms_page_chunks(
-            self._session,
-            tenant_id=tenant_id,
-            page_id=page_id,
-        )
+        try:
+            async with self._session.begin_nested():
+                await delete_cms_page_chunks(
+                    self._session,
+                    tenant_id=tenant_id,
+                    page_id=page_id,
+                )
+        except Exception:
+            LOGGER.warning(
+                "rag_index_delete_failed tenant_id=%s page_id=%s",
+                tenant_id,
+                page_id,
+                exc_info=True,
+            )
 
 
 def _to_payload(page) -> dict[str, Any]:  # noqa: ANN001 — ORM row

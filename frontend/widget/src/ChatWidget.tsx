@@ -29,24 +29,16 @@ interface ChatWidgetProps {
 const defaultBackendUrl = (): string => window.location.origin;
 
 const COLLAPSED_SIZE = { width: 80, height: 80 };
-const OPEN_SIZE = { width: 380, height: 560 };
-const MOBILE_BREAKPOINT = 640;
+const OPEN_SIZE = { width: 360, height: 540 };
 
+// Note: mobile detection lives in the loader (widget.js), NOT here.
+// `window.innerWidth` read inside the iframe returns the iframe's own width
+// (e.g. 80px when collapsed), not the host page's viewport — so any mobile
+// check made here would always be true and trigger fullscreen mode on
+// desktop hosts. The loader has access to the real host viewport and
+// decides mobile vs desktop after receiving "open".
 function postSize(open: boolean): void {
   if (typeof window === "undefined" || !window.parent) return;
-  const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
-  if (open && isMobile) {
-    window.parent.postMessage(
-      {
-        type: "concierge.widget.resize",
-        mode: "mobile",
-        width: window.innerWidth,
-        height: window.innerHeight,
-      },
-      "*"
-    );
-    return;
-  }
   const size = open ? OPEN_SIZE : COLLAPSED_SIZE;
   window.parent.postMessage(
     {
@@ -82,22 +74,20 @@ export function ChatWidget({
     postSize(state.open);
   }, [state.open]);
 
-  // US1 / T051: chat history is page-lifetime only (FR-070). Reset on
-  // page hide and on visibilitychange→hidden so a tab switch + return is
-  // safe but a refresh or navigation discards the conversation.
+  // Short-term memory: messages persist for the tab's lifetime. `pagehide`
+  // (full navigation / tab close) still clears UI state — the conversation
+  // discards there because the new session_id on reload can't reach the old
+  // Redis key. Earlier behavior also reset on visibilitychange→hidden which
+  // wiped history on tab-switch; that's now relaxed so the conversation
+  // survives tab switches and minimize/restore. Backend Redis memory already
+  // keeps the last 12 redacted turns under session:{tenant_id}:{session_id}
+  // with a TTL — the agent sees that on every request.
   useEffect(() => {
-    function onVisibility(): void {
-      if (document.visibilityState === "hidden") {
-        reset();
-      }
-    }
     function onPageHide(): void {
       reset();
     }
-    document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
     return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
     };
   }, [reset]);

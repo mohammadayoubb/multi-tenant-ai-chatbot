@@ -117,6 +117,70 @@ def test_assignee_dropdown_placeholder_when_endpoint_missing(monkeypatch: pytest
     assert "endpoint pending" in captions or "(placeholder)" in captions
 
 
+def test_pagination_shows_one_page_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    big_set = [
+        {
+            "ticket_id": f"ticket-{i:02d}",
+            "opened_at": f"2026-05-{(i % 28) + 1:02d}T10:00:00Z",
+            "last_message_excerpt": f"sample {i}",
+            "status": "pending",
+            "assignee_id": None,
+            "assignee_name": None,
+        }
+        for i in range(25)
+    ]
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET" and req.url.path == "/escalations":
+            return httpx.Response(200, json=big_set)
+        if req.method == "GET" and "/admin-users" in req.url.path:
+            return httpx.Response(200, json=_LIVE_ADMINS)
+        return httpx.Response(404)
+
+    monkeypatch.setattr(page, "_http_client", _factory(handler))
+    at = AppTest.from_file(_ENTRY)
+    at.run(timeout=10)
+    assert not at.exception
+
+    def _save_count(at: AppTest) -> int:
+        return len([b for b in at.button if b.key and b.key.startswith("save_ticket_")])
+
+    assert _save_count(at) == 10
+    caps = " ".join(c.value for c in at.caption)
+    assert "Page 1 of 3" in caps
+
+    at.button(key="escalations_next_page").click()
+    at.run(timeout=10)
+    assert _save_count(at) == 10
+    caps2 = " ".join(c.value for c in at.caption)
+    assert "Page 2 of 3" in caps2
+
+    at.button(key="escalations_next_page").click()
+    at.run(timeout=10)
+    assert _save_count(at) == 5
+
+
+def test_no_bottom_ticket_status_section(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Old design had a 'Ticket status' / 'Ticket <id>' section under the
+    table. Feature 010 moves those controls inline into the row, so neither
+    heading should still render."""
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET" and req.url.path == "/escalations":
+            return httpx.Response(200, json=_LIVE_TICKETS)
+        if req.method == "GET" and "/admin-users" in req.url.path:
+            return httpx.Response(200, json=_LIVE_ADMINS)
+        return httpx.Response(404)
+
+    monkeypatch.setattr(page, "_http_client", _factory(handler))
+    at = AppTest.from_file(_ENTRY)
+    at.run(timeout=10)
+    assert not at.exception
+    md = " ".join(m.value for m in at.markdown)
+    assert "Ticket status" not in md
+    assert "Ticket `11111111" not in md
+
+
 def test_cross_tenant_ticket_403_surfaced(monkeypatch: pytest.MonkeyPatch) -> None:
     """A PATCH that returns 403 must surface a generic forbidden message,
     not raw response text or a stack trace."""

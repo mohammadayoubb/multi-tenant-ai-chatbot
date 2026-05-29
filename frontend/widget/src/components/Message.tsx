@@ -19,9 +19,16 @@ function asCitation(c: unknown): Citation | null {
   return c as Citation;
 }
 
+const TOOL_LABELS: Record<string, string> = {
+  rag_search: "Searched CMS",
+  capture_lead: "Captured lead",
+  escalate: "Escalated",
+};
+
 export function Message({ message }: MessageProps): JSX.Element {
   const isUser = message.role === "user";
   const citations = (message.citations ?? []) as unknown[];
+  const usedTools = Array.isArray(message.used_tools) ? message.used_tools : [];
   const showTicket =
     message.role === "assistant" &&
     message.route === "escalate" &&
@@ -75,6 +82,24 @@ export function Message({ message }: MessageProps): JSX.Element {
               </span>
             );
           })}
+        </div>
+      )}
+      {!isUser && usedTools.length > 0 && (
+        <div
+          className="tool-chips"
+          data-testid="tool-chips"
+          aria-label="Tools used"
+        >
+          {usedTools.map((tool, idx) => (
+            <span
+              key={`${tool}-${idx}`}
+              className="tool-chip"
+              data-testid="tool-chip"
+              data-tool={tool}
+            >
+              {TOOL_LABELS[tool] ?? tool}
+            </span>
+          ))}
         </div>
       )}
       {showTicket && (
