@@ -46,6 +46,7 @@ import jwt
 import pytest
 import pytest_asyncio
 
+from app.services.admin_settings import admin_settings
 from app.services.widget_settings import widget_settings
 
 API_BASE = os.environ.get("SMOKE_API_BASE", "http://localhost:8000")
@@ -376,6 +377,31 @@ async def ask_chat(
         if expected_keyword in answer or time.monotonic() >= deadline:
             return last_status, last_payload
         await asyncio.sleep(RAG_READINESS_POLL_INTERVAL_S)
+
+
+def mint_forged_admin_jwt(
+    tenant_id: UUID,
+    role: str = "tenant_admin",
+    actor_id: str = "smoke-forger@example.test",
+) -> str:
+    """Synthesize a fresh admin-session HS256 JWT.
+
+    Mirrors the shape minted by `app.services.admin_auth.authenticate`. Used by
+    the T094 cross-tenant write probes to prove that a tenant_admin token bound
+    to Tenant A is byte-uniformly refused when it targets a Tenant B resource.
+    The secret comes from `admin_settings()`, same as the production verifier,
+    so the probe models a credible threat (captured-token replay with mutated
+    path), not a brittle signature-tamper.
+    """
+    now = int(datetime.now(timezone.utc).timestamp())
+    claims = {
+        "actor_id": actor_id,
+        "tenant_id": str(tenant_id),
+        "role": role,
+        "iat": now,
+        "exp": now + 300,
+    }
+    return jwt.encode(claims, admin_settings().admin_jwt_secret, algorithm="HS256")
 
 
 def mint_forged_jwt(fixture: SmokeTenantFixture, forged_origin: str) -> str:
@@ -940,3 +966,265 @@ async def test_cross_tenant_probe_returns_generic_refusal(
         f"cross-tenant probe leaked other tenant name into answer: "
         f"{_redact(answer, 200)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Probes — Feature 010 T094: forged-JWT cross-tenant write refusals
+#
+# Eight probes covering every write endpoint added by feature 010. Each mints
+# an admin JWT bound to Tenant A and aims it at a Tenant B resource (either
+# via path-tid or via Tenant B's seeded cms_page_id). All must be refused.
+#
+# Per 010/contracts/missing-endpoints.md §"Cross-tenant 403 byte-uniform body"
+# the contracted refusal is HTTP 403. Two endpoints (revoke / resend) use a
+# random invite token because no invite is seeded in the smoke harness — for
+# those, {403, 404} is accepted (an invite that doesn't exist for the caller's
+# tenant is functionally cross-tenant). The patch-escalation probe is in the
+# same boat (no escalation row exists for Tenant B until N1 + agent path runs
+# during the cross-tenant flows).
+#
+# Intentionally NOT decorated with @require_full_stack — these probes don't
+# depend on the agent path; they need only the route + auth dep, which land
+# with this feature. Per T094 the probes must run on every smoke invocation.
+# ---------------------------------------------------------------------------
+
+_FORBIDDEN_OR_NOT_FOUND = (403, 404)
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_put_agent_config_refused(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """T094 #1: PUT /tenants/{B}/agent-config under Tenant A's JWT → 403."""
+    fixture_a, fixture_b = tenants["A"], tenants["B"]
+    token = mint_forged_admin_jwt(fixture_a.tenant_id)
+    response = await http_client.put(
+        f"/tenants/{fixture_b.tenant_id}/agent-config",
+        json={"persona_name": "Forged", "chips": []},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P6-xtenant-put-agent-config",
+            scenario="T094: forged-JWT PUT agent-config across tenants",
+            tenant="A→B",
+            expected="HTTP 403",
+            observed=f"HTTP {response.status_code}",
+            passed=response.status_code == 403,
+            latency_ms=0,
+            notes="" if response.status_code == 403 else _redact(response.text, 200),
+        )
+    )
+    assert response.status_code == 403, _redact(response.text, 200)
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_put_tenant_settings_refused(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """T094 #3: PUT /tenants/{B}/settings under Tenant A's JWT → 403."""
+    fixture_a, fixture_b = tenants["A"], tenants["B"]
+    token = mint_forged_admin_jwt(fixture_a.tenant_id, role="tenant_manager")
+    response = await http_client.put(
+        f"/tenants/{fixture_b.tenant_id}/settings",
+        json={"rate_limit_lead_per_session": 1},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P6-xtenant-put-settings",
+            scenario="T094: forged-JWT PUT tenant settings across tenants",
+            tenant="A→B",
+            expected="HTTP 403",
+            observed=f"HTTP {response.status_code}",
+            passed=response.status_code == 403,
+            latency_ms=0,
+            notes="" if response.status_code == 403 else _redact(response.text, 200),
+        )
+    )
+    assert response.status_code == 403, _redact(response.text, 200)
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_patch_escalation_refused(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """T094 #2: PATCH /escalations/{id} under Tenant A's JWT → refused.
+
+    No escalation row exists for Tenant B in the bare smoke harness (the
+    escalate tool fires only when agent + N1 are live), so a random UUID is
+    used. The contract calls for 403; the route currently raises 404 for
+    `EscalationNotFound`. Either status proves the write was refused; the
+    important property is that no write reached Tenant B's namespace.
+    """
+    fixture_a = tenants["A"]
+    token = mint_forged_admin_jwt(fixture_a.tenant_id)
+    response = await http_client.patch(
+        f"/escalations/{uuid4()}",
+        json={"status": "resolved"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P6-xtenant-patch-escalation",
+            scenario="T094: forged-JWT PATCH escalation across tenants",
+            tenant="A→B",
+            expected="HTTP 403 or 404",
+            observed=f"HTTP {response.status_code}",
+            passed=response.status_code in _FORBIDDEN_OR_NOT_FOUND,
+            latency_ms=0,
+            notes="" if response.status_code in _FORBIDDEN_OR_NOT_FOUND else _redact(response.text, 200),
+        )
+    )
+    assert response.status_code in _FORBIDDEN_OR_NOT_FOUND, _redact(response.text, 200)
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_post_invite_revoke_refused(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """T094 #4: POST /admin/invites/{token}/revoke under Tenant A's JWT → refused.
+
+    A random token (no invite seeded) takes the `InviteUnavailable` → 404 path;
+    a real cross-tenant invite would take the `InviteForbidden` → 403 path.
+    Either proves the revoke was not applied to another tenant's invite.
+    """
+    fixture_a = tenants["A"]
+    token = mint_forged_admin_jwt(fixture_a.tenant_id)
+    response = await http_client.post(
+        f"/admin/invites/{uuid4()}/revoke",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P6-xtenant-invite-revoke",
+            scenario="T094: forged-JWT POST invite revoke across tenants",
+            tenant="A→B",
+            expected="HTTP 403 or 404",
+            observed=f"HTTP {response.status_code}",
+            passed=response.status_code in _FORBIDDEN_OR_NOT_FOUND,
+            latency_ms=0,
+            notes="" if response.status_code in _FORBIDDEN_OR_NOT_FOUND else _redact(response.text, 200),
+        )
+    )
+    assert response.status_code in _FORBIDDEN_OR_NOT_FOUND, _redact(response.text, 200)
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_post_invite_resend_refused(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """T094 #5: POST /admin/invites/{token}/resend under Tenant A's JWT → refused."""
+    fixture_a = tenants["A"]
+    token = mint_forged_admin_jwt(fixture_a.tenant_id)
+    response = await http_client.post(
+        f"/admin/invites/{uuid4()}/resend",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P6-xtenant-invite-resend",
+            scenario="T094: forged-JWT POST invite resend across tenants",
+            tenant="A→B",
+            expected="HTTP 403 or 404",
+            observed=f"HTTP {response.status_code}",
+            passed=response.status_code in _FORBIDDEN_OR_NOT_FOUND,
+            latency_ms=0,
+            notes="" if response.status_code in _FORBIDDEN_OR_NOT_FOUND else _redact(response.text, 200),
+        )
+    )
+    assert response.status_code in _FORBIDDEN_OR_NOT_FOUND, _redact(response.text, 200)
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_put_cms_page_refused(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """T094 #6: PUT /cms/pages/{B-page-id} under Tenant A's JWT → 403 (byte-uniform)."""
+    fixture_a, fixture_b = tenants["A"], tenants["B"]
+    assert fixture_b.cms_page_ids, "fixture invariant: Tenant B has seeded CMS pages"
+    page_id = fixture_b.cms_page_ids[0]
+    token = mint_forged_admin_jwt(fixture_a.tenant_id)
+    response = await http_client.put(
+        f"/cms/pages/{page_id}",
+        json={"title": "forged", "body": "forged"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P6-xtenant-put-cms",
+            scenario="T094: forged-JWT PUT cms page across tenants",
+            tenant="A→B",
+            expected="HTTP 403",
+            observed=f"HTTP {response.status_code}",
+            passed=response.status_code == 403,
+            latency_ms=0,
+            notes="" if response.status_code == 403 else _redact(response.text, 200),
+        )
+    )
+    assert response.status_code == 403, _redact(response.text, 200)
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_patch_cms_status_refused(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """T094 #7: PATCH /cms/pages/{B-page-id}/status under Tenant A's JWT → 403."""
+    fixture_a, fixture_b = tenants["A"], tenants["B"]
+    assert fixture_b.cms_page_ids, "fixture invariant: Tenant B has seeded CMS pages"
+    page_id = fixture_b.cms_page_ids[0]
+    token = mint_forged_admin_jwt(fixture_a.tenant_id)
+    response = await http_client.patch(
+        f"/cms/pages/{page_id}/status",
+        json={"status": "archived"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P6-xtenant-patch-cms-status",
+            scenario="T094: forged-JWT PATCH cms status across tenants",
+            tenant="A→B",
+            expected="HTTP 403",
+            observed=f"HTTP {response.status_code}",
+            passed=response.status_code == 403,
+            latency_ms=0,
+            notes="" if response.status_code == 403 else _redact(response.text, 200),
+        )
+    )
+    assert response.status_code == 403, _redact(response.text, 200)
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_delete_cms_page_refused(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """T094 #8: DELETE /cms/pages/{B-page-id} under Tenant A's JWT → 403."""
+    fixture_a, fixture_b = tenants["A"], tenants["B"]
+    assert fixture_b.cms_page_ids, "fixture invariant: Tenant B has seeded CMS pages"
+    page_id = fixture_b.cms_page_ids[0]
+    token = mint_forged_admin_jwt(fixture_a.tenant_id)
+    response = await http_client.delete(
+        f"/cms/pages/{page_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P6-xtenant-delete-cms",
+            scenario="T094: forged-JWT DELETE cms page across tenants",
+            tenant="A→B",
+            expected="HTTP 403",
+            observed=f"HTTP {response.status_code}",
+            passed=response.status_code == 403,
+            latency_ms=0,
+            notes="" if response.status_code == 403 else _redact(response.text, 200),
+        )
+    )
+    assert response.status_code == 403, _redact(response.text, 200)
