@@ -39,6 +39,14 @@ class InviteUnavailable(Exception):
     """The invite cannot be acted on (expired / used / unknown / bad input)."""
 
 
+class InviteForbidden(Exception):
+    """Caller is not allowed to act on this invite (cross-tenant)."""
+
+
+class InviteConflict(Exception):
+    """Invite is already used or already revoked — refuse with 409."""
+
+
 class WeakPassword(Exception):
     """Password failed strength check. Surfaced separately so the UI can hint."""
 
@@ -150,12 +158,94 @@ async def accept_invite(
 
 
 def _invite_status(invite: AdminInvite) -> str:
-    """Compute the live status (used / expired / pending) of an invite row."""
+    """Compute the live status (used / revoked / expired / pending) of an invite row."""
     if invite.used_at is not None:
         return "used"
+    if getattr(invite, "revoked_at", None) is not None:
+        return "revoked"
     expires_at = invite.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=UTC)
     if expires_at < datetime.now(tz=UTC):
         return "expired"
     return "pending"
+
+
+@dataclass(frozen=True)
+class InviteActor:
+    """Trusted actor context for invite mutations."""
+
+    tenant_id: UUID
+    actor_id: str
+    role: str  # "tenant_admin" or "tenant_manager"
+
+
+async def revoke_invite(
+    *,
+    token: UUID,
+    actor: InviteActor,
+    invite_repo: AdminInviteRepository,
+    tenant_repo: TenantRepository,
+) -> AdminInvite:
+    """Mark an invite revoked. Raises InviteUnavailable / InviteForbidden / InviteConflict."""
+    invite = await invite_repo.get_by_token(token)
+    if invite is None:
+        raise InviteUnavailable("unknown")
+    _require_actor_scope(invite, actor)
+    status = _invite_status(invite)
+    if status == "used":
+        raise InviteConflict("already_used")
+    if status == "revoked":
+        raise InviteConflict("already_revoked")
+    revoked = await invite_repo.mark_revoked(token, revoked_at=datetime.now(tz=UTC))
+    assert revoked is not None  # repo returned the row we just fetched
+    await tenant_repo.add_audit_log(
+        tenant_id=invite.tenant_id,
+        actor_id=actor.actor_id,
+        actor_role=actor.role,
+        action="admin.invite_revoked",
+        metadata={"invite_id": str(invite.id), "email": invite.email},
+    )
+    return revoked
+
+
+async def resend_invite(
+    *,
+    token: UUID,
+    actor: InviteActor,
+    invite_repo: AdminInviteRepository,
+    tenant_repo: TenantRepository,
+    ttl_seconds: int = 86400 * 7,
+) -> AdminInvite:
+    """Re-mint the invite's token + extend expires_at. Refuses used/revoked rows."""
+    invite = await invite_repo.get_by_token(token)
+    if invite is None:
+        raise InviteUnavailable("unknown")
+    _require_actor_scope(invite, actor)
+    status = _invite_status(invite)
+    if status == "used":
+        raise InviteConflict("already_used")
+    if status == "revoked":
+        raise InviteConflict("already_revoked")
+    new_token = uuid4()
+    new_expires_at = datetime.now(tz=UTC) + timedelta(seconds=ttl_seconds)
+    resent = await invite_repo.resend(
+        token, new_token=new_token, new_expires_at=new_expires_at
+    )
+    assert resent is not None
+    await tenant_repo.add_audit_log(
+        tenant_id=invite.tenant_id,
+        actor_id=actor.actor_id,
+        actor_role=actor.role,
+        action="admin.invite_resent",
+        metadata={"invite_id": str(invite.id), "email": invite.email},
+    )
+    return resent
+
+
+def _require_actor_scope(invite: AdminInvite, actor: InviteActor) -> None:
+    """Tenant manager may act on any tenant; tenant admin only on own."""
+    if actor.role == "tenant_manager":
+        return
+    if invite.tenant_id != actor.tenant_id:
+        raise InviteForbidden("cross_tenant")

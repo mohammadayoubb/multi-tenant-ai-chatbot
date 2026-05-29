@@ -1,102 +1,120 @@
 # Owner: Amer
-"""Platform dashboard for `tenant_manager` role.
+"""Platform Overview dashboard for the `tenant_manager` role.
 
-Minimal placeholder: the platform-wide tenant list, suspend / erase controls,
-and cross-tenant audit log roll-up are out of scope for the auth feature and
-will land with the platform-level CRUD endpoints (Hiba). This screen exists so
-the role-based redirect from login has a real destination.
+Spec 009 US3 T084.
 
-It also exposes the "Invite an admin" form, which IS in scope: it lets a
-tenant_manager mint an invite token for a new tenant_admin or another
-tenant_manager. The form deliberately does not let the user choose a
-tenant_id — the inviter's tenant context flows through the JWT.
+Surfaces aggregate KPIs across the whole platform:
+  - Total tenants
+  - Active tenants
+  - Suspended tenants
+  - Estimated monthly cost (sum across tenants — placeholder until rollup
+    endpoint lands; falls back to the Tenants list count for now)
+  - Open audit-flagged actions (count of recent rows whose action falls in
+    the suspend/erase/blocked-login set)
+
+KPIs use ``_kpi.render_kpi_row`` so the visual language matches the TA
+Overview tab. Every endpoint that is unreachable degrades to a "—" with a
+visible ``(placeholder)`` caption — no raw error text is surfaced (Principle V).
+
+The legacy "Invite an admin" form is intentionally NOT rendered here; the
+TM Invites tab (admin/invites_page.py, T086) owns that surface end-to-end.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
+import httpx
 import streamlit as st
 
-from admin._admin_http import http_client
-from admin.auth_state import get_actor_id, get_tenant_id
+from admin._admin_http import http_client as _http_client
+from admin._kpi import render_kpi_row
+from admin.auth_state import get_actor_id
 
-_ROLE_OPTIONS = ["tenant_admin", "tenant_manager"]
-_TTL_OPTIONS = {
-    "24 hours": 24 * 3600,
-    "7 days": 7 * 24 * 3600,
-    "30 days": 30 * 24 * 3600,
+_PLACEHOLDER = "—"
+
+# Actions that should count toward "open audit-flagged actions" in the headline.
+# Suspensions, erasures, and revocations are the platform-operator-visible
+# events the TM should keep an eye on. The list is intentionally short — when
+# real "flagged" alerting lands it will replace this client-side heuristic.
+_FLAGGED_ACTIONS = {
+    "tenant.suspended",
+    "tenant.erased",
+    "admin.invite_revoked",
 }
 
 
-def _invite_link(token: str) -> str:
-    """Build a click-to-copy acceptance URL.
-
-    The host is intentionally left relative — Streamlit doesn't know its own
-    public URL. In production you'd template this against the admin app's
-    domain; for now we surface the path the inviter can paste.
-    """
-    return f"/?page=accept-invite&token={token}"
-
-
-def _create_invite(email: str, role: str, ttl_seconds: int) -> tuple[bool, dict | str]:
+def _get_json(path: str, *, params: dict[str, str] | None = None) -> tuple[Any, bool]:
+    """Return ``(body, ok)``. ``ok`` is False on any transport or non-2xx error."""
     try:
-        with http_client() as client:
-            resp = client.post(
-                "/admin/invites",
-                json={
-                    "email": email,
-                    "role": role,
-                    "ttl_seconds": ttl_seconds,
-                },
-            )
-    except Exception:
-        return False, "Could not reach the server. Try again."
-    if resp.status_code == 200:
-        try:
-            return True, resp.json()
-        except ValueError:
-            return False, "Server returned an unexpected response."
-    if resp.status_code == 403:
-        return False, "You do not have permission to invite users."
-    if resp.status_code == 400:
-        return False, "Please enter a valid email."
-    return False, "Failed to create invite. Try again."
+        with _http_client() as client:
+            resp = client.get(path, params=params or {})
+    except httpx.HTTPError:
+        return None, False
+    if resp.status_code < 200 or resp.status_code >= 300:
+        return None, False
+    try:
+        return resp.json(), True
+    except ValueError:
+        return None, False
+
+
+def _count_by_status(tenants: Any, status: str) -> int:
+    if not isinstance(tenants, list):
+        return 0
+    return sum(
+        1 for t in tenants if isinstance(t, dict) and t.get("status") == status
+    )
+
+
+def _count_flagged(audit_rows: Any) -> int:
+    if not isinstance(audit_rows, list):
+        return 0
+    return sum(
+        1
+        for r in audit_rows
+        if isinstance(r, dict) and r.get("action") in _FLAGGED_ACTIONS
+    )
 
 
 def render() -> None:
+    """Render the TM Platform Overview headline."""
     st.title("Platform overview")
-    st.write(
-        f"Signed in as **{get_actor_id() or '—'}** (tenant_manager). "
-        "Tenant scope: "
-        f"`{get_tenant_id() or '—'}`."
+    st.caption(f"Signed in as `{get_actor_id() or '—'}` (tenant_manager).")
+
+    tenants, tenants_ok = _get_json("/tenants")
+    audit_rows, audit_ok = _get_json("/audit-logs")
+
+    total_value = str(len(tenants)) if tenants_ok and isinstance(tenants, list) else _PLACEHOLDER
+    active_value = str(_count_by_status(tenants, "active")) if tenants_ok else _PLACEHOLDER
+    suspended_value = (
+        str(_count_by_status(tenants, "suspended")) if tenants_ok else _PLACEHOLDER
     )
-    st.info(
-        "Platform-wide tenant listings, suspend / erase controls, and "
-        "cross-tenant audit will land alongside the platform CRUD endpoints. "
-        "Invite management is available below."
+    flagged_value = str(_count_flagged(audit_rows)) if audit_ok else _PLACEHOLDER
+
+    # Monthly cost rollup endpoint is not yet defined for the TM scope; the
+    # KPI shows a placeholder so the card is visually present without lying.
+    cost_value = _PLACEHOLDER
+
+    render_kpi_row(
+        [
+            ("Total tenants", total_value),
+            ("Active", active_value),
+            ("Suspended", suspended_value),
+        ]
+    )
+    render_kpi_row(
+        [
+            ("Monthly cost (est.)", cost_value),
+            ("Audit-flagged actions", flagged_value),
+        ]
     )
 
-    st.markdown("### Invite an admin")
-    with st.form("invite_admin_form", clear_on_submit=True):
-        email = st.text_input("Invitee email", key="invite_email_input")
-        role = st.selectbox("Role", _ROLE_OPTIONS, key="invite_role_input")
-        ttl_label = st.selectbox(
-            "Invite valid for", list(_TTL_OPTIONS.keys()), key="invite_ttl_input"
+    if not all([tenants_ok, audit_ok]):
+        st.caption(
+            "(placeholder) — one or more platform endpoints were unavailable; "
+            "the affected cards show "
+            f"`{_PLACEHOLDER}` until the service responds."
         )
-        submitted = st.form_submit_button("Create invite", type="primary")
-
-    if submitted:
-        if not email.strip():
-            st.error("Please enter an invitee email.")
-            return
-        with st.spinner("Creating invite…"):
-            ok, payload = _create_invite(
-                email.strip().lower(), role, _TTL_OPTIONS[ttl_label]
-            )
-        if not ok:
-            st.error(payload if isinstance(payload, str) else "Failed to create invite.")
-            return
-        assert isinstance(payload, dict)
-        link = _invite_link(payload["token"])
-        st.success("Invite created. Share this link with the invitee:")
-        st.code(link)
-        st.caption(f"Expires: {payload['expires_at']}")
+    else:
+        st.caption("Use the sidebar to drill into Tenants, Invites, or Audit Logs.")

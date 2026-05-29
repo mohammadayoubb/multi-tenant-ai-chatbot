@@ -18,6 +18,8 @@ import httpx
 import streamlit as st
 
 from admin._admin_http import http_client as _http_client
+from admin._status_pill import render_status
+from admin._table import render_table
 
 _STATUS_OPTIONS = ["all", "captured", "qualified", "spam"]
 
@@ -103,4 +105,34 @@ def render() -> None:
         }
         for lead in filtered
     ]
-    st.dataframe(table, key="leads_table", width="stretch")
+    # Use the shared table helper so the empty-state surface stays consistent
+    # with the rest of the admin app. FR-024: NO download / export control is
+    # rendered here — visitor PII never leaves the admin surface.
+    render_table(
+        table,
+        columns=[
+            "created_at",
+            "name",
+            "contact",
+            "intent",
+            "status",
+            "quality_score",
+        ],
+        empty_state={
+            "title": "No leads captured yet",
+            "message": "Captured leads will appear here as visitors share their contact info with the agent.",
+        },
+        key="leads_table",
+    )
+
+    # US4 / T115: surface status pills below the table so the visual
+    # language matches tenants/invites/escalations. Streamlit's dataframe
+    # can't render colored chips inline.
+    if filtered:
+        st.markdown("#### Lead status")
+        for lead in filtered:
+            cols = st.columns([3, 2])
+            with cols[0]:
+                st.write(lead.get("name") or redact_contact(lead.get("contact")))
+            with cols[1]:
+                render_status(str(lead.get("status", "—")), kind="lead")

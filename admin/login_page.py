@@ -54,8 +54,17 @@ def _post_login(email: str, password: str) -> tuple[bool, str | None]:
     return False, "Login failed. Please try again."
 
 
+_SUBMITTING_KEY = "_login_submitting"
+
+
 def render() -> None:
     brand.render_card_chrome()
+
+    # While a submission is in flight the button is disabled. Streamlit's
+    # single-threaded execution model means the script will already block
+    # at the httpx call, but the disabled state makes the intent visible
+    # and survives the rerun if the user double-clicks.
+    submitting = st.session_state.get(_SUBMITTING_KEY, False)
 
     with st.form("admin_login_form", clear_on_submit=False):
         st.markdown("#### Sign in")
@@ -63,25 +72,36 @@ def render() -> None:
             "Email",
             key="login_email_input",
             autocomplete="email",
+            disabled=submitting,
         )
         password = st.text_input(
             "Password",
             type="password",
             key="login_password_input",
             autocomplete="current-password",
+            disabled=submitting,
         )
-        submitted = st.form_submit_button("Login", type="primary", width="stretch")
+        submitted = st.form_submit_button(
+            "Signing in…" if submitting else "Login",
+            type="primary",
+            width="stretch",
+            disabled=submitting,
+        )
 
-    if submitted:
+    if submitted and not submitting:
         if not email or not password:
             st.error("Please enter your email and password.")
-            return
-        with st.spinner("Signing in…"):
-            success, error = _post_login(email.strip().lower(), password)
-        if success:
-            st.rerun()
         else:
-            st.error(error or _GENERIC_LOGIN_ERROR)
+            st.session_state[_SUBMITTING_KEY] = True
+            try:
+                with st.spinner("Signing you in…"):
+                    success, error = _post_login(email.strip().lower(), password)
+            finally:
+                st.session_state[_SUBMITTING_KEY] = False
+            if success:
+                st.rerun()
+            else:
+                st.error(error or _GENERIC_LOGIN_ERROR)
 
     st.markdown(
         '<div class="concierge-footer">'

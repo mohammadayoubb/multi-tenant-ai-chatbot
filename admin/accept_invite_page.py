@@ -118,7 +118,11 @@ def _render_status_screen(status: str) -> None:
         st.warning("This invite has already been used.")
     elif status == "expired":
         st.warning("This invite has expired.")
+    elif status == "revoked":
+        st.warning("This invite has been revoked. Please ask your admin for a new one.")
     else:
+        # Unknown / null status — collapse to the generic copy so the
+        # backend can't enumerate which states exist via UI text.
         st.error(_GENERIC_INVITE_ERROR)
     _back_to_login_link()
 

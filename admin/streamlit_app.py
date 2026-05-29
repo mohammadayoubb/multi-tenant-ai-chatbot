@@ -6,9 +6,9 @@ Dispatch order (re-evaluated on every Streamlit rerun):
   1. If query-param page=accept-invite -> accept_invite_page (public).
   2. Else if not authenticated -> login_page (public).
   3. Else dispatch by JWT role (server-issued; the user never picks it):
-       tenant_manager  -> platform_dashboard_page
-       tenant_admin    -> tenant dashboard (existing CMS / Leads / Usage /
-                          Widget / Tenant pages)
+       tenant_manager  -> TM tabs (Overview, Tenants, Invites, Usage & Cost,
+                          Audit Logs, Settings) — Spec 009 US3 T090.
+       tenant_admin    -> tenant_dashboard.render() (Spec 009 US2 tabs)
        anything else   -> access_denied_page
   4. The "Sign out" button clears st.session_state and reruns -> step 2.
 """
@@ -18,60 +18,58 @@ import streamlit as st
 from admin import (
     access_denied_page,
     accept_invite_page,
+    audit_page,
     auth_state,
-    cms_page,
-    leads_page,
+    invites_page,
     login_page,
     platform_dashboard_page,
-    tenant_page,
+    settings_page,
+    tenant_dashboard,
+    tenants_page,
     usage_page,
-    widget_page,
 )
 
 st.set_page_config(page_title="Concierge AI Admin", layout="wide")
 
 
-def _render_tenant_dashboard() -> None:
-    """The existing tenant-admin pages, wrapped behind the sidebar nav."""
-    st.title("Tenant dashboard")
-
-    st.sidebar.header("Signed in")
-    st.sidebar.write(auth_state.get_full_name() or auth_state.get_actor_id() or "(unknown)")
-    st.sidebar.caption(f"Tenant: {auth_state.get_tenant_id() or '—'}")
-    if st.sidebar.button("Sign out", key="tenant_logout_button"):
-        auth_state.clear_session()
-        st.rerun()
-
-    st.sidebar.header("Navigation")
-    page = st.sidebar.radio(
-        "Go to",
-        ["Tenant", "CMS", "Leads", "Usage", "Widget", "Guardrails"],
-    )
-    st.subheader(page)
-    if page == "Tenant":
-        tenant_page.render()
-    elif page == "CMS":
-        cms_page.render()
-    elif page == "Leads":
-        leads_page.render()
-    elif page == "Usage":
-        usage_page.render()
-    elif page == "Widget":
-        widget_page.render()
-    else:
-        st.info(
-            "Placeholder admin page. Connect this UI to the FastAPI backend."
-        )
+_TM_TABS = [
+    "Overview",
+    "Tenants",
+    "Invites",
+    "Usage & Cost",
+    "Audit Logs",
+    "Settings",
+]
 
 
-def _render_platform_dashboard() -> None:
+def _render_tm_sidebar() -> str:
     st.sidebar.header("Signed in")
     st.sidebar.write(auth_state.get_full_name() or auth_state.get_actor_id() or "(unknown)")
     st.sidebar.caption("Role: tenant_manager")
     if st.sidebar.button("Sign out", key="platform_logout_button"):
         auth_state.clear_session()
         st.rerun()
-    platform_dashboard_page.render()
+
+    st.sidebar.header("Navigation")
+    return st.sidebar.radio("Go to", _TM_TABS, key="tm_nav_radio")
+
+
+def _render_platform_dashboard() -> None:
+    selection = _render_tm_sidebar()
+    st.title(selection)
+
+    if selection == "Overview":
+        platform_dashboard_page.render()
+    elif selection == "Tenants":
+        tenants_page.render()
+    elif selection == "Invites":
+        invites_page.render()
+    elif selection == "Usage & Cost":
+        usage_page.render(role="tenant_manager")
+    elif selection == "Audit Logs":
+        audit_page.render(role="tenant_manager")
+    elif selection == "Settings":
+        settings_page.render()
 
 
 # --- dispatch ---------------------------------------------------------------
@@ -90,6 +88,6 @@ _role = auth_state.get_role()
 if _role == "tenant_manager":
     _render_platform_dashboard()
 elif _role == "tenant_admin":
-    _render_tenant_dashboard()
+    tenant_dashboard.render()
 else:
     access_denied_page.render()

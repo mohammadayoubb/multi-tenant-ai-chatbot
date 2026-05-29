@@ -63,6 +63,42 @@ jobs:
       - name: Docker build
         run: docker compose build
 
+  # Widget bundle-size budget — enforces specs/009-concierge-ui SC-007 by
+  # building the widget and asserting:
+  #   - public/widget.js loader  ≤  5 KB gzipped
+  #   - dist/assets/*.js app bundle ≤ 80 KB gzipped
+  # Lighthouse-CI would deliver the same signal but its runtime is far larger;
+  # we only need the wire-cost budget here. The Python checker is contracted
+  # at scripts/check_bundle_size.py.
+  bundle-size-budget:
+    needs: lint-test-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/widget/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install widget deps
+        working-directory: frontend/widget
+        run: npm ci
+
+      - name: Build widget
+        working-directory: frontend/widget
+        run: npm run build
+
+      - name: Check bundle-size budget
+        run: python scripts/check_bundle_size.py --dist frontend/widget/dist
+
   # Lean-image audit — enforces Constitution Principle V by asserting that
   # the modelserver and guardrails images do not contain torch or transformers.
   # Contract: specs/008-demo-polish/contracts/lean-image-audit-cli.md.

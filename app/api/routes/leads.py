@@ -44,6 +44,8 @@ async def list_leads(
     """Return up to `limit` leads for the caller's tenant, newest first."""
     if admin is None:
         raise HTTPException(status_code=403, detail="forbidden")
+    if admin.role == "tenant_manager":
+        raise HTTPException(status_code=403, detail="forbidden")
     safe_limit = max(1, min(limit, 500))
     repo = LeadRepository(session)
     rows = await repo.list_by_tenant(admin.tenant_id, limit=safe_limit)

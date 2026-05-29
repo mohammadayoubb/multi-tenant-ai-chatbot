@@ -53,3 +53,28 @@ class AdminInviteRepository:
     async def mark_used(self, invite: AdminInvite, *, used_at: datetime) -> None:
         invite.used_at = used_at
         await self._session.flush()
+
+    async def mark_revoked(
+        self, token: UUID, *, revoked_at: datetime
+    ) -> AdminInvite | None:
+        invite = await self.get_by_token(token)
+        if invite is None:
+            return None
+        invite.revoked_at = revoked_at
+        await self._session.flush()
+        return invite
+
+    async def resend(
+        self,
+        token: UUID,
+        *,
+        new_token: UUID,
+        new_expires_at: datetime,
+    ) -> AdminInvite | None:
+        invite = await self.get_by_token(token)
+        if invite is None:
+            return None
+        invite.token = new_token
+        invite.expires_at = new_expires_at
+        await self._session.flush()
+        return invite

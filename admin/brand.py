@@ -17,6 +17,47 @@ PRODUCT_TAGLINE = (
     "conversations in one place."
 )
 
+# Shared design tokens consumed by the admin helpers (`_table`, `_kpi`,
+# `_status_pill`, `_empty`). Streamlit doesn't have CSS variables we can rely
+# on, so we keep the palette + spacing scale in one Python dict per family.
+COLORS = {
+    "bg": "#ffffff",
+    "surface": "#ffffff",
+    "surface_alt": "#f8fafc",
+    "border": "#e6e8eb",
+    "text": "#0f172a",
+    "text_muted": "#475569",
+    "text_soft": "#64748b",
+    "brand": "#2563eb",
+    "brand_hover": "#1d4ed8",
+    "success": "#16a34a",
+    "success_bg": "#dcfce7",
+    "warn": "#d97706",
+    "warn_bg": "#fef3c7",
+    "danger": "#dc2626",
+    "danger_bg": "#fee2e2",
+    "info": "#0ea5e9",
+    "info_bg": "#e0f2fe",
+    "neutral": "#64748b",
+    "neutral_bg": "#f1f5f9",
+}
+
+SPACING = {
+    "1": "0.25rem",
+    "2": "0.5rem",
+    "3": "0.75rem",
+    "4": "1rem",
+    "5": "1.25rem",
+    "6": "1.5rem",
+}
+
+RADIUS = {
+    "sm": "6px",
+    "md": "10px",
+    "lg": "14px",
+    "pill": "999px",
+}
+
 _CARD_CSS = """
 <style>
 section.main > div.block-container {

@@ -36,6 +36,8 @@ class _FakeUser:
     email: str
     password_hash: str
     role: str = "tenant_admin"
+    status: str = "active"
+    full_name: str | None = None
 
 
 class _FakeAdminUserRepo:
@@ -78,7 +80,28 @@ def client(monkeypatch: pytest.MonkeyPatch):
                 tenant_id=TENANT_ID,
                 email="alice@acme.example",
                 password_hash=hash_password("s3cret-pw"),
-            )
+            ),
+            _FakeUser(
+                id=uuid4(),
+                tenant_id=TENANT_ID,
+                email="suspended@acme.example",
+                password_hash=hash_password("s3cret-pw"),
+                status="suspended",
+            ),
+            _FakeUser(
+                id=uuid4(),
+                tenant_id=TENANT_ID,
+                email="deleted@acme.example",
+                password_hash=hash_password("s3cret-pw"),
+                status="deleted",
+            ),
+            _FakeUser(
+                id=uuid4(),
+                tenant_id=TENANT_ID,
+                email="badrole@acme.example",
+                password_hash=hash_password("s3cret-pw"),
+                role="viewer",
+            ),
         ]
     )
     monkeypatch.setattr(
@@ -154,6 +177,44 @@ def test_login_unknown_email_returns_same_401(client) -> None:
     resp = tc.post(
         "/admin/login",
         json={"email": "nobody@example.com", "password": "anything"},
+    )
+    assert resp.status_code == 401
+    assert resp.content == b'{"error":"invalid_credentials"}'
+
+
+def test_login_suspended_user_returns_same_401(client) -> None:
+    """Suspended user must look identical to wrong-password / unknown-email."""
+    tc, _ = client
+    resp = tc.post(
+        "/admin/login",
+        json={"email": "suspended@acme.example", "password": "s3cret-pw"},
+    )
+    assert resp.status_code == 401
+    assert resp.content == b'{"error":"invalid_credentials"}'
+
+
+def test_login_deleted_user_returns_same_401(client) -> None:
+    """Deleted (soft-removed) user must collapse to the same canonical 401."""
+    tc, _ = client
+    resp = tc.post(
+        "/admin/login",
+        json={"email": "deleted@acme.example", "password": "s3cret-pw"},
+    )
+    assert resp.status_code == 401
+    assert resp.content == b'{"error":"invalid_credentials"}'
+
+
+def test_login_unknown_role_returns_same_401(client) -> None:
+    """A valid user whose role is outside the admin allowlist still 401s.
+
+    Guards against accidental privilege widening — a future tenant-side role
+    (e.g. "viewer") must NOT be able to mint an admin JWT just by passing the
+    credential check.
+    """
+    tc, _ = client
+    resp = tc.post(
+        "/admin/login",
+        json={"email": "badrole@acme.example", "password": "s3cret-pw"},
     )
     assert resp.status_code == 401
     assert resp.content == b'{"error":"invalid_credentials"}'

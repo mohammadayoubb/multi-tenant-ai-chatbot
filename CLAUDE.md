@@ -265,14 +265,14 @@ Do not build ahead of the requested phase.
 <!-- SPECKIT START -->
 ## Active Spec-Kit Feature
 
-For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/008-demo-polish/plan.md](specs/008-demo-polish/plan.md).
+For technologies, project structure, shell commands, and feature-specific decisions, read the current plan: [specs/009-concierge-ui/plan.md](specs/009-concierge-ui/plan.md).
 
 Related artifacts:
-- [specs/008-demo-polish/spec.md](specs/008-demo-polish/spec.md)
-- [specs/008-demo-polish/research.md](specs/008-demo-polish/research.md)
-- [specs/008-demo-polish/data-model.md](specs/008-demo-polish/data-model.md)
-- [specs/008-demo-polish/contracts/](specs/008-demo-polish/contracts/)
-- [specs/008-demo-polish/quickstart.md](specs/008-demo-polish/quickstart.md)
+- [specs/009-concierge-ui/spec.md](specs/009-concierge-ui/spec.md)
+- [specs/009-concierge-ui/research.md](specs/009-concierge-ui/research.md)
+- [specs/009-concierge-ui/data-model.md](specs/009-concierge-ui/data-model.md)
+- [specs/009-concierge-ui/contracts/](specs/009-concierge-ui/contracts/)
+- [specs/009-concierge-ui/quickstart.md](specs/009-concierge-ui/quickstart.md)
 
 Prior features (shipped):
 - [specs/001-widget-token-exchange/](specs/001-widget-token-exchange/)
@@ -282,4 +282,5 @@ Prior features (shipped):
 - [specs/005-admin-read-only-pages/](specs/005-admin-read-only-pages/)
 - [specs/006-ci-eval-gates/](specs/006-ci-eval-gates/)
 - [specs/007-cross-tenant-smoke-e2e/](specs/007-cross-tenant-smoke-e2e/)
+- [specs/008-demo-polish/](specs/008-demo-polish/)
 <!-- SPECKIT END -->

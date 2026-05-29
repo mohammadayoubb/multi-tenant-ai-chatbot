@@ -47,13 +47,14 @@
       );
       iframe.setAttribute("referrerpolicy", "no-referrer-when-downgrade");
       iframe.style.position = "fixed";
-      iframe.style.right = "24px";
-      iframe.style.bottom = "24px";
-      iframe.style.width = "360px";
-      iframe.style.height = "520px";
+      iframe.style.right = "16px";
+      iframe.style.bottom = "16px";
+      iframe.style.width = "80px";
+      iframe.style.height = "80px";
       iframe.style.border = "0";
-      iframe.style.borderRadius = "0.6rem";
-      iframe.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+      iframe.style.background = "transparent";
+      iframe.style.borderRadius = "0";
+      iframe.style.boxShadow = "none";
 
       iframe.addEventListener("load", function () {
         if (iframe.contentWindow) {
@@ -64,6 +65,41 @@
             },
             iframe.src
           );
+        }
+      });
+
+      // US4 / T106: iframe sizing handshake. The widget posts a resize
+      // message when its open/closed state changes; the loader adjusts the
+      // iframe accordingly so the bubble doesn't eat host-page clicks.
+      var iframeOrigin = new URL(iframe.src).origin;
+      window.addEventListener("message", function (event) {
+        if (event.source !== iframe.contentWindow) return;
+        if (event.origin !== iframeOrigin) return;
+        var data = event.data;
+        if (!data || data.type !== "concierge.widget.resize") return;
+        var width = typeof data.width === "number" ? data.width : 80;
+        var height = typeof data.height === "number" ? data.height : 80;
+        if (data.mode === "mobile") {
+          iframe.style.right = "0";
+          iframe.style.bottom = "0";
+          iframe.style.width = "100vw";
+          iframe.style.height = "100vh";
+          iframe.style.borderRadius = "0";
+          iframe.style.boxShadow = "none";
+        } else if (data.mode === "open") {
+          iframe.style.right = "16px";
+          iframe.style.bottom = "16px";
+          iframe.style.width = width + "px";
+          iframe.style.height = height + "px";
+          iframe.style.borderRadius = "0.6rem";
+          iframe.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+        } else {
+          iframe.style.right = "16px";
+          iframe.style.bottom = "16px";
+          iframe.style.width = width + "px";
+          iframe.style.height = height + "px";
+          iframe.style.borderRadius = "0";
+          iframe.style.boxShadow = "none";
         }
       });
 

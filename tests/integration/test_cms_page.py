@@ -129,13 +129,25 @@ def test_server_error_falls_back_to_placeholder(
     assert "Traceback" not in full_output
 
 
-def test_no_mutating_controls(monkeypatch: pytest.MonkeyPatch) -> None:
-    """FR-008: no create/edit/delete affordances anywhere."""
+def test_placeholder_path_renders_no_mutating_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Spec 009 US2/T070: CRUD controls only render on real (non-placeholder)
+    data. The placeholder rows have no real ids, so the Edit / Publish /
+    Delete affordances stay hidden."""
     monkeypatch.setattr(
-        cms_page,
-        "_http_client",
-        _factory(lambda req: httpx.Response(200, json=_LIVE_PAGES)),
+        cms_page, "_http_client", _factory(lambda req: httpx.Response(500))
     )
     at = AppTest.from_file(_ENTRY)
     at.run(timeout=10)
-    assert at.button == []
+    assert not at.exception
+    # The Create form's submit button lives behind an expander and is the
+    # only mutating affordance reachable on the placeholder path. All
+    # per-row controls (Publish/Unpublish/Delete/Save changes) must be
+    # absent so we never POST against placeholder ids.
+    button_keys = [b.key for b in at.button if b.key]
+    for key in button_keys:
+        assert not key.startswith("cms_publish_")
+        assert not key.startswith("cms_unpublish_")
+        assert not key.startswith("cms_archive_")
+        assert not key.startswith("cms_delete_")

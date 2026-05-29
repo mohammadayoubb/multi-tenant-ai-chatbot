@@ -24,11 +24,25 @@ export type WidgetMessage = HostOriginMessage | ReadyMessage;
 
 // --- Phase 2 chat UI ---
 
+export interface Citation {
+  title?: string;
+  url?: string;
+  [extra: string]: unknown;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   ticket_id?: string | null;
+  citations?: Citation[] | unknown[];
+  route?: string;
+}
+
+export interface AgentConfig {
+  greeting: string;
+  chips: string[];
+  _placeholder?: boolean;
 }
 
 // Defensive-parse shape of the /chat success response. `answer` and `route`

@@ -71,7 +71,7 @@ Repo root: `G:\multi-tenant-ai-chatbot`. All paths below are repo-root-relative.
 
 - [X] T007 [US2] Edit [RUNBOOK.md](../../RUNBOOK.md): replace the existing `## Demo Flow` section (lines 35–45 in the current file — the nine bare bullets) with nine numbered steps, each carrying the concrete command/UI action and the observable success signal per [research.md](research.md) §R4. Owner header `# Owner: Amer` on line 1 is preserved.
 - [X] T008 [US2] In the same edit to [RUNBOOK.md](../../RUNBOOK.md), append a new `## Run smoke test` subsection immediately after the Demo Flow containing the single line `pytest tests/smoke/` (and one explanatory sentence: "Exits 0 against a running local stack."). Reference [scripts/smoke_check.py](../../scripts/smoke_check.py) as the CI-equivalent wrapper in a parenthetical note.
-- [ ] T009 [US2] Walk the runbook on a clean clone end-to-end: `git clone` to a new directory, follow steps 1–9, then run `pytest tests/smoke/`. Any step that fails or required an undocumented manual fix-up is updated in [RUNBOOK.md](../../RUNBOOK.md) immediately. Repeat until a clean walk-through passes with zero edits during the walk. Time the walk; record the elapsed minutes in scratch notes for SC-002 confirmation.
+- [X] T009 [US2] Walk the runbook on a clean clone end-to-end: `git clone` to a new directory, follow steps 1–9, then run `pytest tests/smoke/`. Any step that fails or required an undocumented manual fix-up is updated in [RUNBOOK.md](../../RUNBOOK.md) immediately. Repeat until a clean walk-through passes with zero edits during the walk. Time the walk; record the elapsed minutes in scratch notes for SC-002 confirmation.
 
 **Checkpoint**: Runbook is the source of truth for the demo; smoke test line works.
 

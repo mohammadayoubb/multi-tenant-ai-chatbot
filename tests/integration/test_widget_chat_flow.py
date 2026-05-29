@@ -106,3 +106,94 @@ def test_chat_with_token_from_disallowed_origin_never_issues(
     )
     assert resp.status_code == 403
     assert resp.content == b'{"error":"widget_unavailable"}'
+
+
+# ---------------------------------------------------------------------------
+# T045 — Four canonical visitor flows (FAQ, lead, escalate, refusal)
+# ---------------------------------------------------------------------------
+
+
+def _issue_token(client: TestClient) -> tuple[str, str]:
+    """Walk the token-exchange step and return (token, session_id)."""
+    resp = client.post(
+        "/widgets/token",
+        headers={"Origin": FIXTURE_ALLOWED_ORIGIN},
+        json={"widget_id": FIXTURE_WIDGET_ID},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    return body["token"], body["session_id"]
+
+
+def _send_chat(client: TestClient, token: str, session_id: str, message: str):
+    return client.post(
+        "/chat",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": message, "session_id": session_id},
+    )
+
+
+def test_canonical_flow_faq_returns_answer_and_optional_citations(
+    client: TestClient,
+) -> None:
+    """Canonical flow 1 — FAQ. The visitor asks a factual question; the
+    chat path returns an `answer` + `route` and optional citations."""
+    token, session_id = _issue_token(client)
+    resp = _send_chat(client, token, session_id, "What are your business hours?")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert isinstance(body["answer"], str) and body["answer"]
+    assert isinstance(body["route"], str)
+    # Optional fields: when present, citations must be a list. The widget's
+    # defensive parser tolerates absence (api.ts parseChatResponse).
+    assert body.get("citations", []) == [] or isinstance(body["citations"], list)
+
+
+def test_canonical_flow_lead_capture_returns_well_formed_reply(
+    client: TestClient,
+) -> None:
+    """Canonical flow 2 — Lead. A visitor offering contact info gets a
+    well-formed reply that includes any tools used (`capture_lead` when
+    available; in-memory fallback may route to `agent`)."""
+    token, session_id = _issue_token(client)
+    resp = _send_chat(
+        client,
+        token,
+        session_id,
+        "Please contact me at lead@example.com about a quote",
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert isinstance(body["answer"], str)
+    assert isinstance(body["used_tools"], list)
+
+
+def test_canonical_flow_escalate_returns_well_formed_reply(
+    client: TestClient,
+) -> None:
+    """Canonical flow 3 — Escalation. Asking for a human gets a well-formed
+    reply; downstream rendering layers handle the ticket_id pill."""
+    token, session_id = _issue_token(client)
+    resp = _send_chat(client, token, session_id, "I want to talk to a human please")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert isinstance(body["answer"], str)
+    # Optional ticket_id: when present, it's either a non-empty string or
+    # null. The widget treats both as "no pill" / "pill" respectively.
+    if "ticket_id" in body:
+        assert body["ticket_id"] is None or isinstance(body["ticket_id"], str)
+
+
+def test_canonical_flow_refusal_collapses_to_single_widget_unavailable_body(
+    client: TestClient,
+) -> None:
+    """Canonical flow 4 — Cross-tenant / unknown probe. The widget token
+    exchange refuses with the byte-identical anti-enumeration body before
+    the visitor ever reaches /chat."""
+    resp = client.post(
+        "/widgets/token",
+        headers={"Origin": FIXTURE_ALLOWED_ORIGIN},
+        json={"widget_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    assert resp.status_code == 403
+    assert resp.content == b'{"error":"widget_unavailable"}'
