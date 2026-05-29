@@ -1,0 +1,27 @@
+/*
+ * Widget design tokens. Authoritative source for the widget palette,
+ * spacing scale, radii, and motion timings. styles.css `@import`s this
+ * file at the top; individual component-scoped styles read these vars.
+ *
+ * Transitions are gated on prefers-reduced-motion in styles.css per
+ * Phase 6 / T110 — the duration tokens here remain numeric so the
+ * gated rule can pick them up.
+ */
+
+:root {
+  --c-bg: #ffffff;
+  --c-fg: #0f172a;
+  --c-bubble: #f1f5f9;
+  --c-accent: #4f46e5;
+
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+
+  --motion-fast: 140ms;
+  --motion-slow: 220ms;
+}

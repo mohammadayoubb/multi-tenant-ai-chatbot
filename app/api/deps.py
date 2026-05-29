@@ -96,12 +96,14 @@ class TenantAdminContext:
     """Trusted context returned by require_tenant_admin.
 
     Shape contract: tenant_id is the caller's tenant; actor_id is the admin
-    user id (or None until the real session model lands). The role check is
-    already enforced by the time this object is constructed.
+    user id (or None until the real session model lands). `role` is one of
+    `tenant_admin` / `tenant_manager` (filtered by the calling dep); routes
+    that need to gate by role read it from here instead of redecoding the JWT.
     """
 
     tenant_id: UUID
     actor_id: str | None
+    role: str = "tenant_admin"
 
 
 async def require_admin_session(
@@ -132,7 +134,9 @@ async def require_admin_session(
                 "tenant_manager",
             ):
                 return TenantAdminContext(
-                    tenant_id=session.tenant_id, actor_id=session.actor_id
+                    tenant_id=session.tenant_id,
+                    actor_id=session.actor_id,
+                    role=session.role,
                 )
 
     if os.getenv("CONCIERGE_ENV", "dev") != "dev":
@@ -145,7 +149,11 @@ async def require_admin_session(
         tenant_id = UUID(x_concierge_tenant_id)
     except ValueError:
         return None
-    return TenantAdminContext(tenant_id=tenant_id, actor_id=x_concierge_actor_id)
+    return TenantAdminContext(
+        tenant_id=tenant_id,
+        actor_id=x_concierge_actor_id,
+        role=x_concierge_role,
+    )
 
 
 async def require_tenant_admin(
@@ -179,7 +187,9 @@ async def require_tenant_admin(
             session = verify_admin_token(token)
             if session is not None and session.role == "tenant_admin":
                 return TenantAdminContext(
-                    tenant_id=session.tenant_id, actor_id=session.actor_id
+                    tenant_id=session.tenant_id,
+                    actor_id=session.actor_id,
+                    role=session.role,
                 )
 
     if os.getenv("CONCIERGE_ENV", "dev") != "dev":
@@ -192,4 +202,8 @@ async def require_tenant_admin(
         tenant_id = UUID(x_concierge_tenant_id)
     except ValueError:
         return None
-    return TenantAdminContext(tenant_id=tenant_id, actor_id=x_concierge_actor_id)
+    return TenantAdminContext(
+        tenant_id=tenant_id,
+        actor_id=x_concierge_actor_id,
+        role="tenant_admin",
+    )

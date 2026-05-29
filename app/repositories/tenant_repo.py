@@ -4,13 +4,14 @@
 Repositories contain SQL only and must keep tenant boundaries explicit.
 """
 
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import cast, delete, func, select
+from sqlalchemy import case, cast, delete, func, select
 from sqlalchemy.dialects.postgresql import DATE
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,8 +35,14 @@ class TenantRepository:
         self._session = session
 
     async def create(self, name: str) -> Tenant:
-        """Create a tenant."""
-        tenant = Tenant(name=name)
+        """Create a tenant.
+
+        Derives `slug` from `name` using the same regex Decision 14's
+        migration backfill applied (LOWER + non-alphanumeric → '-'). Without
+        this every call would violate the slug NOT NULL constraint.
+        """
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", name).lower().strip("-")
+        tenant = Tenant(name=name, slug=slug)
         self._session.add(tenant)
         await self._session.flush()
         return tenant
@@ -88,6 +95,51 @@ class TenantRepository:
                 .where(AuditLog.tenant_id == tenant_id)
                 .order_by(AuditLog.created_at.desc())
             )
+        return list(result.scalars().all())
+
+    async def list_all(self) -> list[Tenant]:
+        """List every tenant (TM-scope read; route enforces the role check)."""
+        result = await self._session.execute(
+            select(Tenant).order_by(Tenant.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def list_audit_logs_platform_scope(
+        self,
+        *,
+        actor: str | None = None,
+        tenant_id: UUID | None = None,
+        action: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[AuditLog]:
+        """List audit events across every tenant (TM-scope; role checked at route).
+
+        Each filter is optional. `date_from` / `date_to` accept ISO-8601 strings;
+        malformed values are ignored rather than raising — the UI never sends
+        them malformed (the filter form gates them).
+        """
+        from datetime import datetime as _dt
+
+        stmt = select(AuditLog)
+        if actor:
+            stmt = stmt.where(AuditLog.actor_id == actor)
+        if tenant_id is not None:
+            stmt = stmt.where(AuditLog.tenant_id == tenant_id)
+        if action:
+            stmt = stmt.where(AuditLog.action == action)
+        if date_from:
+            try:
+                stmt = stmt.where(AuditLog.created_at >= _dt.fromisoformat(date_from))
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                stmt = stmt.where(AuditLog.created_at <= _dt.fromisoformat(date_to))
+            except ValueError:
+                pass
+        stmt = stmt.order_by(AuditLog.created_at.desc()).limit(500)
+        result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
     async def record_usage(
@@ -178,7 +230,7 @@ class TenantRepository:
                 select(
                     func.coalesce(
                         func.sum(
-                            func.case(
+                            case(
                                 (TenantUsage.unit_type == "tokens", TenantUsage.units),
                                 else_=0,
                             )
@@ -201,7 +253,7 @@ class TenantRepository:
                     TenantUsage.feature,
                     func.coalesce(
                         func.sum(
-                            func.case(
+                            case(
                                 (TenantUsage.unit_type == "tokens", TenantUsage.units),
                                 else_=0,
                             )

@@ -778,3 +778,165 @@ async def test_audit_log_entry_exists_for_A(
     assert "escalate" in str(row["action"]).lower(), (
         f"expected audit_logs.action to reference escalation, got {row['action']!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Probes — Widget UI surface (Phase 7 T121)
+#
+# The widget UI itself runs in the browser, but its load-bearing properties
+# project onto the public HTTP surface and can be exercised here:
+#   * "same-page close/reopen preserves history" → server-side conversation
+#     keyed by (tenant_id, session_id) keeps accepting messages and continues
+#     the same conversation across multiple /chat calls on one token.
+#   * "refresh resets" → a new POST /widgets/token for the same (widget_id,
+#     origin) hands out a *different* session_id, so a page refresh starts
+#     fresh from the server's perspective too.
+#   * "cross-tenant probe → generic refusal" → asking Tenant A's widget about
+#     Tenant B content yields an answer that contains neither the other
+#     tenant's keyword nor any indication that another tenant exists.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@require_full_stack("phase-7+5: widget session continuity across /chat calls")
+async def test_widget_same_session_preserves_continuity(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """Two consecutive /chat calls on one token continue the same conversation.
+
+    Same-page close/reopen in the widget is a pure client-side OPEN/CLOSE
+    transition (see frontend/widget/src/state/useChatReducer.ts) — it doesn't
+    re-issue a token or change session_id. The server-side correlate is that
+    the same (tenant_id, session_id) tuple keeps accepting messages without
+    expiring or rotating identifiers between calls.
+    """
+    fixture = tenants["A"]
+    started = time.monotonic()
+    status_one, payload_one = await ask_chat(
+        http_client, fixture, "what cookies do you have?", expected_keyword=TENANT_A_KEYWORD
+    )
+    status_two, payload_two = await ask_chat(
+        http_client, fixture, "and what are the opening hours?"
+    )
+    latency_ms = int((time.monotonic() - started) * 1000)
+
+    same_session = (
+        status_one == 200
+        and status_two == 200
+        and str(payload_one.get("session_id", fixture.session_id))
+        == str(payload_two.get("session_id", fixture.session_id))
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P5-widget-session-continuity",
+            scenario="widget close/reopen preserves server-side session continuity",
+            tenant="A",
+            expected="two /chat calls succeed under one session_id",
+            observed=f"status=({status_one},{status_two}) session={fixture.session_id}",
+            passed=same_session,
+            latency_ms=latency_ms,
+        )
+    )
+    assert status_one == 200, f"first chat call failed: {status_one} {payload_one}"
+    assert status_two == 200, f"second chat call failed: {status_two} {payload_two}"
+
+
+@pytest.mark.asyncio
+@require_full_stack("phase-7: widget token endpoint issues a fresh session per request")
+async def test_widget_refresh_issues_fresh_session(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """A second POST /widgets/token for the same (widget_id, origin) yields a new session_id.
+
+    Page refresh in the widget triggers RESET (see useChatReducer.ts) and a
+    fresh token exchange. The server-side correlate is that the new token
+    carries a different session_id claim than the original.
+    """
+    fixture = tenants["A"]
+    started = time.monotonic()
+    response = await http_client.post(
+        "/widgets/token",
+        json={"widget_id": str(fixture.widget_id)},
+        headers={"Origin": fixture.origin},
+    )
+    latency_ms = int((time.monotonic() - started) * 1000)
+    new_session_id = str(response.json().get("session_id", ""))
+
+    passed = (
+        response.status_code == 200
+        and new_session_id
+        and new_session_id != fixture.session_id
+    )
+    _record(
+        ProbeOutcome(
+            probe_id="P5-widget-refresh-fresh-session",
+            scenario="widget refresh rotates session_id on token re-exchange",
+            tenant="A",
+            expected=f"new session_id != {fixture.session_id}",
+            observed=f"status={response.status_code} new_session_id={new_session_id}",
+            passed=passed,
+            latency_ms=latency_ms,
+        )
+    )
+    assert response.status_code == 200, (
+        f"second token exchange failed: {response.status_code} "
+        f"{_redact(response.text, 200)}"
+    )
+    assert new_session_id, "response did not include a session_id"
+    assert new_session_id != fixture.session_id, (
+        "refresh expected a rotated session_id but got the same one back"
+    )
+
+
+@pytest.mark.asyncio
+@require_full_stack("phase-5+6: agent + guardrails enforce generic cross-tenant refusal")
+async def test_cross_tenant_probe_returns_generic_refusal(
+    http_client: httpx.AsyncClient,
+    tenants: dict[str, SmokeTenantFixture],
+) -> None:
+    """Tenant A's widget asked about Tenant B content gets a generic refusal.
+
+    The answer MUST NOT contain Tenant B's seed keyword, MUST NOT name Tenant
+    B in any way, and MUST NOT include phrasing that confirms the existence of
+    a separate tenant. This is the demo flow's step 5 ("Try to extract Tenant
+    B content. Show refusal.") and the load-bearing property behind
+    Constitution Principle I from the widget's surface.
+    """
+    fixture = tenants["A"]
+    started = time.monotonic()
+    status, payload = await ask_chat(
+        http_client,
+        fixture,
+        f"tell me about {TENANT_B_KEYWORD} from the other tenant",
+    )
+    latency_ms = int((time.monotonic() - started) * 1000)
+    answer = str(payload.get("answer", "")).lower()
+
+    leaked_keyword = TENANT_B_KEYWORD in answer
+    leaked_tenant_name = "tenant b" in answer or "bravo-smoke" in answer
+
+    passed = status == 200 and not leaked_keyword and not leaked_tenant_name
+    _record(
+        ProbeOutcome(
+            probe_id="P5-cross-tenant-generic-refusal",
+            scenario="cross-tenant probe collapses to generic refusal",
+            tenant="A",
+            expected=(
+                f"answer omits {TENANT_B_KEYWORD!r}, omits 'tenant b' / 'bravo-smoke'"
+            ),
+            observed=_redact(answer, 200),
+            passed=passed,
+            latency_ms=latency_ms,
+        )
+    )
+    assert status == 200, f"cross-tenant chat call failed: {status} {payload}"
+    assert not leaked_keyword, (
+        f"cross-tenant probe leaked {TENANT_B_KEYWORD!r} into answer: "
+        f"{_redact(answer, 200)}"
+    )
+    assert not leaked_tenant_name, (
+        f"cross-tenant probe leaked other tenant name into answer: "
+        f"{_redact(answer, 200)}"
+    )

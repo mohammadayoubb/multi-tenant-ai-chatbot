@@ -428,3 +428,43 @@ Consequences:
 - BLOCKED.md H2 (SQL widget_configs backend) can now be closed by writing the SQL repository against the new `widget_configs` table — no further schema work needed.
 - `WIDGET_REPO_BACKEND=sql` is no longer NotImplementedError-bait; an implementation can land in a follow-up PR with a one-file repository.
 - The contract's `messages` table replaces the Redis short-term memory as the durable record; Redis stays for fast lookup. Whether ChatService writes to one or both is deferred to the agent owner.
+
+## Decision 15 — UI Streamlit ceiling accepted; mobile admin out of scope (Amer, 2026-05-29)
+
+Context: Spec 009-concierge-ui ships a multi-tab admin surface for two roles (tenant_admin, tenant_manager) plus the embeddable visitor widget. Streamlit's component model is the right fit for a single-process, fast-iteration admin tool, but it caps what the dashboard can do — limited responsive design, no client-side routing, server-rendered every interaction, no native modal stack, and no fine-grained DOM control for mobile-first viewports. SPA alternatives (React/Next, SvelteKit) would buy fine-grained UX at the cost of a second deploy target, a second auth flow, and a second eval surface — none of which the demo schedule has room for.
+
+Decision: Accept the Streamlit ceiling for the admin surface. SC-006 explicitly restricts the admin UI to ≥ 1280 px viewports; mobile admin is out of scope and rendered as a notice ("Use a desktop browser"). The widget — the only surface a visitor sees — remains a hand-built React iframe app with full responsive + a11y guarantees (Phase 6).
+
+Consequences: Admin pages stay Pythonic and reviewable; teammates outside the frontend slice can land an admin tab without learning a JS framework. Modal interactions use Streamlit's `st.dialog` / confirmation-button patterns rather than a real modal stack — adequate for current TA/TM flows. Mobile admin reopens as a feature if a future spec requires it; until then the widget alone carries the responsive-design budget. The 1280 × 800 overflow check is enforced by quickstart §3 (T128) and by visual inspection during demo prep.
+
+References: specs/009-concierge-ui/research.md R1; specs/009-concierge-ui/spec.md SC-006.
+
+## Decision 16 — Widget state machine extracted to useChatReducer; pure-function reducer for testability (Amer, 2026-05-29)
+
+Context: Before Phase 2 the widget kept its OPEN / CLOSE / SEND / RETRY / RESET semantics inline in `frontend/widget/src/components/ChatPane.tsx`. Every UX-state change required pulling apart React hooks plus the impure send path, which made it hard to add the eight reducer-only smoke tests (T027) and impossible to add the bubble launcher (US4) without touching the same file two more times.
+
+Decision: Extract the state machine into `frontend/widget/src/state/useChatReducer.ts`. `initialState` and `reducer(state, action)` are exported as pure functions; the `useChatReducer()` hook wraps them with the impure `send` / `retry` flows that call into `api.ts`. The orchestrator (`frontend/widget/src/main.tsx`) consumes the hook and is the only file that knows about both the visual layout and the dispatcher; every other component is presentation-only.
+
+Consequences: T027's reducer-only tests run in microseconds (no React renderer needed) and cover every transition by name; the SESSION_EXPIRED / RETRY_LAST guard rules are testable as plain assertions. T105 (bubble launcher) flipped the initial OPEN to false in one line without changing any other component. The single-in-flight guard inside SEND_START — previously an inline mutex in the component — is now visible at the reducer level where a future contributor can find it.
+
+References: specs/009-concierge-ui/research.md R6; specs/009-concierge-ui/tasks.md T018, T027.
+
+## Decision 17 — Backend gap closure bundled with UI (Amer, 2026-05-29)
+
+Context: Phase 2A of feature 009 had to choose between (a) deferring the 13 missing backend endpoints listed in `specs/009-concierge-ui/contracts/missing-endpoints.md` to a later phase and shipping the UI behind placeholder fallbacks indefinitely, or (b) implementing the endpoints inside this feature so the UI consumes real data from day one. Deferral would let the UI ship sooner but leave the placeholder fallback (research Decision 5 / feature 005) carrying production load.
+
+Decision: Ship the 13 endpoints inside feature 009 as Phase 2A — admin invite revoke/resend, tenant agent-config GET/PUT, escalations list/patch, admin-users list, platform-guardrails read, tenant-settings PUT, CMS edit/publish/delete, TM-scope tenants list, TM-scope audit-logs feed. Each endpoint follows the existing routes → services → repositories layering and emits the contract-listed audit events. The placeholder fallback in admin pages survives, but only as a development-time safety net for when a developer runs the UI without the api container; production code paths assume real endpoints.
+
+Consequences: The UI surfaces (US2 + US3) get real read/write semantics in the same merge cycle as the page modules that consume them, so the demo walk in quickstart §3 doesn't depend on any out-of-band PR. Tenant isolation is verified at the endpoint level via `tests/integration/test_*_endpoint.py` (Phase 2A) instead of being deferred to whoever picks up the placeholder. The contract document `contracts/missing-endpoints.md` becomes load-bearing review material for Phase 2A but goes dormant once the endpoints land. The fallback path remains exercised by existing placeholder tests.
+
+References: specs/009-concierge-ui/tasks.md Phase 2A; specs/009-concierge-ui/contracts/missing-endpoints.md.
+
+## Decision 18 — Widget bubble launcher introduced as a new UX state (Amer, 2026-05-29)
+
+Context: The pre-009 widget rendered as an always-open panel — visitors saw the chat immediately on every page load. This is intrusive for first-time visitors, doesn't match the industry convention (Intercom / Drift / Crisp all use a bubble launcher), and prevents the widget iframe from being collapsed to a small target. SC-005 and US4 require the new bubble behavior plus a11y guarantees (dialog role, focus trap, ESC, mobile sheet, reduced-motion).
+
+Decision: Introduce a bubble launcher as a new UX state. The iframe loader (`frontend/widget/public/widget.js`) sizes the iframe to **80 × 80 px** when collapsed and **380 × 560 px** when open; mobile viewports under 640 px become a full-viewport sheet on open. Postmessage handshake between the loader and the React orchestrator (`main.tsx`) keeps the iframe dimensions in sync with the panel's `state.open`. The reducer's `initialState.open = false` makes bubble-only the default render; OPEN dispatches when the user clicks the bubble, CLOSE dispatches on the panel header's close button, ESC, or the bubble-when-open. `FocusTrap` (research R2, ~30 lines) wraps the panel body and returns focus to the bubble on close.
+
+Consequences: First-time visitors see the brand-coloured bubble only — chat history is empty under it, so the EmptyState renders only after they click. Reduced-motion is respected (all transitions gated on `prefers-reduced-motion: no-preference`). The 80×80 collapsed size matches Intercom's launcher footprint, so the visual integration with tenant sites stays familiar. The vitest axe-core scan (T103) runs both open and closed states and reports zero serious/critical violations.
+
+References: specs/009-concierge-ui/research.md R2, R8; specs/009-concierge-ui/spec.md SC-005; specs/009-concierge-ui/tasks.md T105–T112.

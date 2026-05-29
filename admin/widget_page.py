@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -18,6 +19,19 @@ import httpx
 import streamlit as st
 
 from admin._admin_http import http_client as _http_client
+
+# Allow-listed theme keys (research.md R4). Anything else triggers an inline
+# validation error and disables Save — tenants cannot smuggle arbitrary CSS
+# through the theme blob.
+ALLOWED_THEME_KEYS: frozenset[str] = frozenset(
+    {"primary_color", "text_color", "bubble_color", "border_radius"}
+)
+
+# WCAG 2.x AA body-text contrast minimum.
+_WCAG_AA_RATIO = 4.5
+# Panel background the contrast check is computed against (matches the
+# widget's default panel surface).
+_PANEL_BG_HEX = "#ffffff"
 
 
 def _fetch_config() -> dict[str, Any] | None:
@@ -31,10 +45,17 @@ def _fetch_config() -> dict[str, Any] | None:
     return resp.json()
 
 
+# PUT /widgets/config accepts only these fields (WidgetConfigUpdateRequest uses
+# extra='forbid'). widget_id comes back on GET but is not settable; sending it
+# returns 422.
+_PUT_FIELDS = ("allowed_origins", "enabled", "theme_json", "greeting")
+
+
 def _save_config(draft: dict[str, Any]) -> tuple[int, Any]:
+    payload = {k: draft.get(k) for k in _PUT_FIELDS}
     try:
         with _http_client() as client:
-            resp = client.put("/widgets/config", json=draft)
+            resp = client.put("/widgets/config", json=payload)
     except httpx.HTTPError:
         return 0, "transport error"
     try:
@@ -42,6 +63,68 @@ def _save_config(draft: dict[str, Any]) -> tuple[int, Any]:
     except ValueError:
         body = resp.text
     return resp.status_code, body
+
+
+def _validate_theme_keys(parsed: dict[str, Any]) -> list[str]:
+    """Return the list of disallowed keys present in a parsed theme object."""
+    return sorted(k for k in parsed.keys() if k not in ALLOWED_THEME_KEYS)
+
+
+def _hex_to_rgb(value: str) -> tuple[int, int, int] | None:
+    s = value.strip().lstrip("#")
+    if len(s) == 3:
+        s = "".join(c * 2 for c in s)
+    if len(s) != 6:
+        return None
+    try:
+        r = int(s[0:2], 16)
+        g = int(s[2:4], 16)
+        b = int(s[4:6], 16)
+    except ValueError:
+        return None
+    return r, g, b
+
+
+def _relative_luminance(rgb: tuple[int, int, int]) -> float:
+    def channel(c: int) -> float:
+        srgb = c / 255.0
+        return srgb / 12.92 if srgb <= 0.03928 else ((srgb + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(c) for c in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast_ratio(fg_hex: str, bg_hex: str) -> float | None:
+    fg = _hex_to_rgb(fg_hex)
+    bg = _hex_to_rgb(bg_hex)
+    if fg is None or bg is None:
+        return None
+    l_fg = _relative_luminance(fg)
+    l_bg = _relative_luminance(bg)
+    lighter, darker = (l_fg, l_bg) if l_fg >= l_bg else (l_bg, l_fg)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _theme_contrast_ok(parsed: dict[str, Any]) -> bool:
+    """True when ``primary_color`` (if present) meets WCAG AA against panel bg."""
+    primary = parsed.get("primary_color")
+    if not isinstance(primary, str) or not primary.strip():
+        return True
+    ratio = _contrast_ratio(primary, _PANEL_BG_HEX)
+    if ratio is None:
+        return True
+    return ratio >= _WCAG_AA_RATIO
+
+
+def contrast_fallback_warning(parsed: dict[str, Any]) -> str | None:
+    """Return a user-facing contrast-fallback warning, or None if the theme passes."""
+    if _theme_contrast_ok(parsed):
+        return None
+    return (
+        "Contrast fallback: the chosen primary color does not meet WCAG AA "
+        "(4.5:1) against the widget panel background. The widget will fall "
+        "back to its built-in accent until a higher-contrast color is chosen."
+    )
 
 
 def _origin_locally_valid(raw: str) -> bool:
@@ -70,6 +153,8 @@ def _draft_is_valid(draft: dict[str, Any], theme_text: str) -> bool:
         except json.JSONDecodeError:
             return False
         if not isinstance(parsed, dict):
+            return False
+        if _validate_theme_keys(parsed):
             return False
     # Enabled + empty origins.
     if draft.get("enabled") and not draft.get("allowed_origins"):
@@ -181,36 +266,138 @@ def render() -> None:
             "origin or toggle Enabled off before saving."
         )
 
-    # --- Theme (US3) ---
-    st.subheader("Theme (free-form JSON object)")
-    theme_text = st.text_area(
-        "Theme JSON",
-        value=theme_text,
-        height=180,
-        key="widget_config_theme_text",
+    # --- Theme (friendly designer + raw-JSON escape hatch) ---
+    st.subheader("Theme")
+    st.caption(
+        "Pick the colors your visitors will see. Changes preview below; saved "
+        "themes apply on the next visitor mount."
     )
-    if theme_text.strip():
-        try:
-            parsed_theme = json.loads(theme_text)
-        except json.JSONDecodeError as exc:
-            st.error(f"Theme JSON is invalid: {exc.msg} (line {exc.lineno}).")
-            parsed_theme = None
-        else:
-            if not isinstance(parsed_theme, dict):
-                st.error("Theme must be a JSON object (not a scalar or array).")
+    st.markdown("_Live preview updates as you change the colors._")
+
+    saved_theme: dict[str, Any] = saved.get("theme_json") or {}
+
+    # Seed each designer control once from the saved theme (or sensible defaults).
+    for key, default in (
+        ("theme_primary", saved_theme.get("primary_color") or "#0066cc"),
+        ("theme_text_color", saved_theme.get("text_color") or "#1a1a1a"),
+        ("theme_bubble", saved_theme.get("bubble_color") or "#e8f0fe"),
+        ("theme_radius", int(saved_theme.get("border_radius") or 12)),
+        ("theme_use_defaults", not bool(saved_theme)),
+    ):
+        if key not in st.session_state:
+            st.session_state[key] = default
+
+    use_defaults = st.checkbox(
+        "Use the widget's built-in colors (no custom theme)",
+        key="theme_use_defaults",
+        help="Tick this if you don't want to override the widget's defaults.",
+    )
+
+    if not use_defaults:
+        c1, c2, c3 = st.columns(3)
+        primary = c1.color_picker("Buttons & launcher", key="theme_primary")
+        text_color = c2.color_picker("Message text", key="theme_text_color")
+        bubble = c3.color_picker("Assistant bubble", key="theme_bubble")
+        radius = st.slider("Corner roundness (px)", 0, 24, key="theme_radius")
+
+        # Live preview — non-technical at-a-glance check.
+        st.markdown("**Live preview**")
+        st.markdown(
+            f'<div style="display:flex; gap:12px; align-items:center;'
+            f' margin:12px 0; padding:14px; background:#f6f7f9;'
+            f' border-radius:8px; font-family:-apple-system,Segoe UI,Roboto,sans-serif;">'
+            f'<div style="background:{primary}; width:96px; height:36px;'
+            f' border-radius:{radius}px; color:#fff; display:flex;'
+            f' align-items:center; justify-content:center; font-weight:500;">Chat</div>'
+            f'<div style="background:{bubble}; color:{text_color};'
+            f' padding:10px 14px; border-radius:{radius}px; max-width:300px;">'
+            f'Hi! How can I help you today?</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Live contrast check on the primary color — friendly phrasing.
+        ratio = _contrast_ratio(primary, _PANEL_BG_HEX)
+        if ratio is not None and ratio < _WCAG_AA_RATIO:
+            st.warning(
+                f"Low contrast (your color is {ratio:.1f}:1 against the panel "
+                f"background; WCAG AA needs 4.5:1). To keep the widget readable "
+                "for everyone, it'll quietly fall back to its built-in accent "
+                "color until you pick something stronger."
+            )
+
+        designer_theme: dict[str, Any] | None = {
+            "primary_color": primary,
+            "text_color": text_color,
+            "bubble_color": bubble,
+            "border_radius": int(radius),
+        }
+    else:
+        designer_theme = None
+        st.caption("→ Saving with this checked clears any custom theme.")
+
+    draft["theme_json"] = designer_theme
+
+    # Advanced escape hatch — kept so power users (and the test suite) can
+    # still poke the raw JSON directly. When non-empty, the parsed JSON
+    # overrides the designer.
+    with st.expander("Advanced — edit raw theme JSON"):
+        st.caption(
+            "Optional: paste an allow-listed theme JSON object. When set here, "
+            "it overrides the designer above."
+        )
+        theme_text = st.text_area(
+            "Raw theme JSON",
+            value=theme_text,
+            height=140,
+            key="widget_config_theme_text",
+        )
+        if theme_text.strip():
+            try:
+                parsed_theme = json.loads(theme_text)
+            except json.JSONDecodeError as exc:
+                st.error(f"Theme JSON is invalid: {exc.msg} (line {exc.lineno}).")
                 parsed_theme = None
             else:
-                st.success("Theme JSON is valid.")
-    else:
-        parsed_theme = None
-    draft["theme_json"] = parsed_theme
+                if not isinstance(parsed_theme, dict):
+                    st.error(
+                        "Theme must be a JSON object (not a scalar or array)."
+                    )
+                    parsed_theme = None
+                else:
+                    disallowed = _validate_theme_keys(parsed_theme)
+                    if disallowed:
+                        st.error(
+                            "Theme JSON contains unknown keys: "
+                            + ", ".join(disallowed)
+                            + ". Allowed keys: "
+                            + ", ".join(sorted(ALLOWED_THEME_KEYS))
+                            + "."
+                        )
+                        parsed_theme = None
+                    else:
+                        fallback_msg = contrast_fallback_warning(parsed_theme)
+                        if fallback_msg is not None:
+                            st.warning(fallback_msg)
+                        else:
+                            st.success("Theme JSON is valid.")
+            if parsed_theme is not None:
+                draft["theme_json"] = parsed_theme
 
-    # --- Theme preview (US3 stretch goal) ---
-    st.subheader("Theme preview")
-    st.info(
-        "Theme preview: the saved theme will apply on next visitor mount. "
-        "Live preview lands together with the widget runtime's theme support "
-        "in a later phase."
+    # --- Embed snippet (T073) -----------------------------------------------
+    st.subheader("Embed snippet")
+    widget_id = saved.get("widget_id") or draft.get("widget_id") or "<widget-id>"
+    backend_url = os.getenv("CONCIERGE_BACKEND_URL", "http://localhost:8000")
+    snippet = (
+        f'<script src="{backend_url}/widget.js" '
+        f'data-widget-id="{widget_id}" '
+        f'data-backend-url="{backend_url}" defer></script>'
+    )
+    st.code(snippet, language="html")
+    st.caption(
+        "Paste this on the website pages where you want the concierge to "
+        "appear. The widget will load only on the origins you've allow-listed "
+        "above."
     )
 
     # --- Save controls (FR-016/017/018) ---

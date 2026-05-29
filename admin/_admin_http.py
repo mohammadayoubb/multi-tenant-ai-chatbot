@@ -19,7 +19,7 @@ import os
 
 import httpx
 
-from admin.auth_state import get_tenant_id, get_token
+from admin.auth_state import get_actor_id, get_role, get_tenant_id, get_token
 
 # Demo tenant id matching the InMemoryWidgetRepository fixture; used only in
 # `_SAMPLE_*` placeholder dicts when the backend is unreachable.
@@ -31,11 +31,25 @@ def backend_url() -> str:
 
 
 def http_client() -> httpx.Client:
-    """Default admin HTTP client. Tests monkeypatch each page's `_http_client`."""
+    """Default admin HTTP client. Tests monkeypatch each page's `_http_client`.
+
+    Attaches the admin JWT (Bearer) for routes that use `require_admin_session`,
+    and also forwards the session identity as `X-Actor-Role` / `X-Actor-Id`
+    headers so the legacy platform-actor routes (POST /tenants,
+    POST /tenants/{id}/suspend, DELETE /tenants/{id}) used by the Tenant
+    Manager dashboard work without a separate client. Routes that don't read
+    those headers ignore them.
+    """
     headers: dict[str, str] = {}
     token = get_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    role = get_role()
+    if role:
+        headers["X-Actor-Role"] = role
+    actor_id = get_actor_id()
+    if actor_id:
+        headers["X-Actor-ID"] = actor_id
     return httpx.Client(base_url=backend_url(), headers=headers, timeout=10.0)
 
 

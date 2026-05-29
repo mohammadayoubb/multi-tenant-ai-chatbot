@@ -6,7 +6,12 @@
 //   or React-state memory only. NEVER write to localStorage, sessionStorage,
 //   cookies, or IndexedDB.
 
-import type { ChatErrorKind, ChatResponse, WidgetTokenResponse } from "./types";
+import type {
+  AgentConfig,
+  ChatErrorKind,
+  ChatResponse,
+  WidgetTokenResponse,
+} from "./types";
 
 let _token: string | null = null;
 let _sessionId: string | null = null;
@@ -129,6 +134,100 @@ export async function sendChatMessage(
   }
 
   return parseChatResponse(raw);
+}
+
+// ---------------------------------------------------------------------------
+// US1 — agent config (greeting + chips)
+// ---------------------------------------------------------------------------
+
+const AGENT_CONFIG_PLACEHOLDER: AgentConfig = {
+  greeting: "How can we help?",
+  chips: ["View services", "Pricing", "Book appointment", "Talk to human"],
+  _placeholder: true,
+};
+
+/** Decode the JWT payload (no verification — server is the source of truth). */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const padded = parts[1] + "===".slice((parts[1].length + 3) % 4);
+    const json = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+    const parsed = JSON.parse(json) as unknown;
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Extract tenant_id claim from the in-memory widget JWT, if any. */
+export function getTenantIdFromToken(): string | null {
+  if (_token === null) return null;
+  const claims = decodeJwtPayload(_token);
+  const tid = claims?.tenant_id;
+  return typeof tid === "string" && tid.length > 0 ? tid : null;
+}
+
+/**
+ * Fetch the tenant agent config (greeting + chips).
+ *
+ * Production path: GET /tenants/{tid}/agent-config with the widget JWT.
+ * Dev-time safety net: if the endpoint is not yet live (404 / 501) or
+ * the JWT does not carry a tenant_id (tests / pre-handshake), fall back
+ * to hard-coded English defaults with `_placeholder: true` so the panel
+ * still renders something useful.
+ */
+export async function fetchAgentConfig(
+  backendUrl: string
+): Promise<AgentConfig> {
+  const token = _token;
+  const tenantId = getTenantIdFromToken();
+  if (token === null || tenantId === null) {
+    return { ...AGENT_CONFIG_PLACEHOLDER };
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${backendUrl}/tenants/${tenantId}/agent-config`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return { ...AGENT_CONFIG_PLACEHOLDER };
+  }
+
+  if (res.status === 404 || res.status === 501) {
+    return { ...AGENT_CONFIG_PLACEHOLDER };
+  }
+  if (!res.ok) {
+    return { ...AGENT_CONFIG_PLACEHOLDER };
+  }
+
+  let raw: unknown;
+  try {
+    raw = await res.json();
+  } catch {
+    return { ...AGENT_CONFIG_PLACEHOLDER };
+  }
+  return parseAgentConfig(raw);
+}
+
+function parseAgentConfig(raw: unknown): AgentConfig {
+  if (typeof raw !== "object" || raw === null) {
+    return { ...AGENT_CONFIG_PLACEHOLDER };
+  }
+  const obj = raw as Record<string, unknown>;
+  const greeting =
+    typeof obj.greeting === "string" && obj.greeting.length > 0
+      ? obj.greeting
+      : AGENT_CONFIG_PLACEHOLDER.greeting;
+  const chipsRaw = Array.isArray(obj.chips) ? obj.chips : [];
+  const chips = chipsRaw
+    .filter((c): c is string => typeof c === "string" && c.length > 0)
+    .slice(0, 6);
+  return { greeting, chips };
 }
 
 /** Defensive parse: `answer` + `route` required; everything else defaults. */

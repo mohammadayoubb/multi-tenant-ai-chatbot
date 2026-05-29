@@ -1,17 +1,18 @@
 // Owner: Amer
+// Widget entry point. Runs the token-exchange handshake against the host
+// origin, then mounts the ChatWidget orchestrator. Phase 2 keeps the panel
+// always-open; the bubble launcher (US4 / T105) replaces this with a
+// state.open-driven Bubble/Panel switch.
+
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { exchangeToken } from "./api";
-import { ChatPane } from "./components/ChatPane";
-import type { HostOriginMessage } from "./types";
+import { exchangeToken, fetchAgentConfig } from "./api";
+import { ChatWidget } from "./ChatWidget";
+import type { AgentConfig, HostOriginMessage } from "./types";
 import "./styles.css";
 
 type Status = "waiting_for_host_origin" | "exchanging" | "ready" | "unavailable";
 
-// Default: same origin as the iframe (works when the API serves the widget bundle
-// directly, and when the Vite dev server proxies /widgets+/chat to the API).
-// Override at build time with VITE_BACKEND_URL when the widget is hosted from a
-// different origin than the API.
 const backendUrl: string =
   (import.meta.env.VITE_BACKEND_URL as string | undefined) ??
   window.location.origin;
@@ -28,6 +29,7 @@ function isHostOriginMessage(value: unknown): value is HostOriginMessage {
 function WidgetApp(): JSX.Element {
   const [status, setStatus] = useState<Status>("waiting_for_host_origin");
   const [hostOrigin, setHostOrigin] = useState<string | null>(null);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
   const widgetId = new URLSearchParams(window.location.search).get("widget_id");
 
   useEffect(() => {
@@ -44,7 +46,11 @@ function WidgetApp(): JSX.Element {
     if (!hostOrigin || !widgetId) return;
     setStatus("exchanging");
     exchangeToken(backendUrl, widgetId)
-      .then(() => {
+      .then(async () => {
+        // Best-effort agent-config load; falls back to placeholder shape
+        // on any failure path so the panel always has chips + greeting.
+        const cfg = await fetchAgentConfig(backendUrl);
+        setAgentConfig(cfg);
         setStatus("ready");
         if (window.parent && hostOrigin) {
           window.parent.postMessage(
@@ -67,7 +73,12 @@ function WidgetApp(): JSX.Element {
   if (status === "ready") {
     return (
       <div className="widget-shell">
-        <ChatPane backendUrl={backendUrl} />
+        <ChatWidget
+          backendUrl={backendUrl}
+          chips={agentConfig?.chips ?? []}
+          greeting={agentConfig?.greeting}
+          placeholderConfig={agentConfig?._placeholder === true}
+        />
       </div>
     );
   }
@@ -79,4 +90,7 @@ function WidgetApp(): JSX.Element {
   );
 }
 
-createRoot(document.getElementById("root") as HTMLElement).render(<WidgetApp />);
+const rootEl = document.getElementById("root");
+if (rootEl) {
+  createRoot(rootEl).render(<WidgetApp />);
+}

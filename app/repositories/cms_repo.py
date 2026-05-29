@@ -4,6 +4,7 @@
 All CMS queries must be scoped by tenant_id.
 """
 
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -56,3 +57,50 @@ class CmsRepository:
         self._session.add(page)
         await self._session.flush()
         return page
+
+    async def get(self, page_id: UUID) -> CmsPage | None:
+        """Lookup one CMS page by id, regardless of tenant.
+
+        The tenant-scope check happens at the service layer so the route can
+        return a single 403 body for "not yours" while still distinguishing
+        "unknown id" with a 404.
+        """
+        result = await self._session.execute(
+            select(CmsPage).where(CmsPage.id == page_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def update(
+        self,
+        page_id: UUID,
+        tenant_id: UUID,
+        body: dict[str, Any],
+    ) -> CmsPage | None:
+        """Tenant-scoped field-by-field update. Returns None on cross-tenant miss."""
+        page = await self.get(page_id)
+        if page is None or page.tenant_id != tenant_id:
+            return None
+        for field_name in ("title", "slug", "body", "source_url", "status"):
+            if field_name in body:
+                setattr(page, field_name, body[field_name])
+        await self._session.flush()
+        return page
+
+    async def set_status(
+        self, page_id: UUID, tenant_id: UUID, status: str
+    ) -> CmsPage | None:
+        page = await self.get(page_id)
+        if page is None or page.tenant_id != tenant_id:
+            return None
+        page.status = status
+        await self._session.flush()
+        return page
+
+    async def soft_delete(self, page_id: UUID, tenant_id: UUID) -> bool:
+        """Mark archived (and keep the row for audit-trail) rather than DELETE."""
+        page = await self.get(page_id)
+        if page is None or page.tenant_id != tenant_id:
+            return False
+        page.status = "archived"
+        await self._session.flush()
+        return True

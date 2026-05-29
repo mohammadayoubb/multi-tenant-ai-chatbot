@@ -65,6 +65,9 @@ class Tenant(Base):
     memberships: Mapped[list[TenantMembership]] = relationship(back_populates="tenant")
     widget_configs: Mapped[list[WidgetConfig]] = relationship(back_populates="tenant")
     agent_configs: Mapped[list[TenantAgentConfig]] = relationship(back_populates="tenant")
+    settings: Mapped[Optional[TenantSettings]] = relationship(
+        back_populates="tenant", uselist=False
+    )
 
 
 class AdminUser(Base):
@@ -130,6 +133,7 @@ class AdminInvite(Base):
     invited_by: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
@@ -535,6 +539,38 @@ class TenantAgentConfig(Base):
     )
 
     tenant: Mapped[Tenant] = relationship(back_populates="agent_configs")
+
+
+class TenantSettings(Base):
+    """Per-tenant platform defaults the Tenant Manager can edit."""
+
+    __tablename__ = "tenant_settings"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+        unique=True,
+    )
+    default_invite_ttl_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=604800
+    )
+    rate_limit_chat_per_minute: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=30
+    )
+    rate_limit_token_per_minute: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=60
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    tenant: Mapped[Tenant] = relationship(back_populates="settings")
 
 
 class RagChunk(Base):

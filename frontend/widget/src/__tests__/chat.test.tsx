@@ -21,7 +21,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { ChatPane } from "../components/ChatPane";
+import { ChatWidget as ChatPane } from "../ChatWidget";
 import { __debugSetToken, clearToken } from "../api";
 
 const BACKEND = "http://localhost:8000";
@@ -89,7 +89,7 @@ describe("US1: happy path", () => {
       ticket_id: null,
     });
 
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     const input = screen.getByTestId("chat-input-textarea");
     fireEvent.change(input, { target: { value: "What are your hours?" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -116,7 +116,7 @@ describe("US1: happy path", () => {
 
   it("Shift+Enter inserts a newline; empty input does nothing", () => {
     const fetchMock = mockFetchOnce({ answer: "ok", route: "agent" });
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     const input = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
 
     // Empty input + Enter: no fetch.
@@ -142,7 +142,7 @@ describe("US1: happy path", () => {
     const fetchMock = vi.fn(async () => pending);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     const input = screen.getByTestId("chat-input-textarea");
     fireEvent.change(input, { target: { value: "test" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -160,7 +160,7 @@ describe("US1: happy path", () => {
 
   it("auto-scroll: scrollTop is set to scrollHeight after a new message", async () => {
     mockFetchOnce({ answer: "ok", route: "agent" });
-    const { container } = render(<ChatPane backendUrl={BACKEND} />);
+    const { container } = render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
 
     const list = container.querySelector(".message-list") as HTMLDivElement;
     // jsdom defaults scrollHeight to 0; stub it so the effect's assignment is observable.
@@ -184,7 +184,7 @@ describe("US2: 401 → terminal expired state", () => {
     const fetchMock = mockFetchSequence([
       () => jsonResponse({ detail: "Token expired" }, 401),
     ]);
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     const input = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "hello" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -203,7 +203,7 @@ describe("US2: 5xx + retry", () => {
       () => jsonResponse({ detail: "Internal Server Error" }, 500),
       () => jsonResponse({ answer: "We're open 9-5", route: "agent" }, 200),
     ]);
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     const input = screen.getByTestId("chat-input-textarea");
     fireEvent.change(input, { target: { value: "test 500" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -237,7 +237,7 @@ describe("US2: network failure + retry", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     const input = screen.getByTestId("chat-input-textarea");
     fireEvent.change(input, { target: { value: "test network" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -279,7 +279,7 @@ describe("US2: defensive parse sweep (SC-002)", () => {
 
   it.each(malformedShapes)("renders or fails-safe for shape %j", async (shape) => {
     mockFetchOnce(shape);
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     const input = screen.getByTestId("chat-input-textarea");
     fireEvent.change(input, { target: { value: "probe" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -303,7 +303,7 @@ describe("US2: defensive parse sweep (SC-002)", () => {
 describe("US2: route mapping", () => {
   it("escalate + ticket_id shows pill", async () => {
     mockFetchOnce({ answer: "Connecting…", route: "escalate", ticket_id: "abc-123" });
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     fireEvent.change(screen.getByTestId("chat-input-textarea"), {
       target: { value: "help" },
     });
@@ -315,7 +315,7 @@ describe("US2: route mapping", () => {
 
   it("escalate without ticket_id suppresses pill", async () => {
     mockFetchOnce({ answer: "Connecting…", route: "escalate", ticket_id: null });
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     fireEvent.change(screen.getByTestId("chat-input-textarea"), {
       target: { value: "help" },
     });
@@ -328,7 +328,7 @@ describe("US2: route mapping", () => {
     "%s renders normally, no pill",
     async (route) => {
       mockFetchOnce({ answer: `Reply via ${route}`, route });
-      render(<ChatPane backendUrl={BACKEND} />);
+      render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
       fireEvent.change(screen.getByTestId("chat-input-textarea"), {
         target: { value: "x" },
       });
@@ -342,7 +342,7 @@ describe("US2: route mapping", () => {
 describe("US2: no raw codes or tokens in any visible UI", () => {
   it("error banner contains no HTTP code, no token, no stack frame", async () => {
     mockFetchSequence([() => jsonResponse({ detail: "boom" }, 500)]);
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     // Use a message that doesn't itself contain HTTP-code-shaped text.
     fireEvent.change(screen.getByTestId("chat-input-textarea"), {
       target: { value: "hello" },
@@ -371,7 +371,7 @@ describe("US3: browser storage discipline (SC-005)", () => {
       { answer: "reply 4", route: "future_route" },
     ];
     mockFetchSequence(replies.map((r) => () => jsonResponse(r)));
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     const input = screen.getByTestId("chat-input-textarea");
 
     for (let i = 0; i < replies.length; i += 1) {
@@ -416,10 +416,146 @@ describe("US3: browser storage discipline (SC-005)", () => {
   });
 });
 
+// =====================================================
+// US1 — Citation chips (T041)
+// =====================================================
+
+describe("US1: citation chips render with clickable links", () => {
+  it("renders one chip per citation with target=_blank and rel=noopener noreferrer", async () => {
+    mockFetchOnce({
+      answer: "Our pricing is on the website.",
+      route: "agent",
+      citations: [
+        { title: "Pricing FAQ", url: "https://example.com/pricing" },
+        { title: "Plans Overview", url: "https://example.com/plans" },
+      ],
+    });
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
+    fireEvent.change(screen.getByTestId("chat-input-textarea"), {
+      target: { value: "How much?" },
+    });
+    fireEvent.keyDown(screen.getByTestId("chat-input-textarea"), { key: "Enter" });
+    await screen.findByText("Our pricing is on the website.");
+
+    const chips = screen.getAllByTestId("citation-chip");
+    expect(chips).toHaveLength(2);
+    expect(chips[0].tagName).toBe("A");
+    expect(chips[0].getAttribute("href")).toBe("https://example.com/pricing");
+    expect(chips[0].getAttribute("target")).toBe("_blank");
+    expect(chips[0].getAttribute("rel")).toBe("noopener noreferrer");
+    expect(chips[0].textContent).toBe("Pricing FAQ");
+  });
+
+  it("falls back to 'Source' label when title is missing", async () => {
+    mockFetchOnce({
+      answer: "See here.",
+      route: "agent",
+      citations: [{ url: "https://example.com/faq" }],
+    });
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
+    fireEvent.change(screen.getByTestId("chat-input-textarea"), {
+      target: { value: "ref?" },
+    });
+    fireEvent.keyDown(screen.getByTestId("chat-input-textarea"), { key: "Enter" });
+    await screen.findByText("See here.");
+    expect(screen.getByTestId("citation-chip").textContent).toBe("Source");
+  });
+
+  it("omits the citation row when citations is empty", async () => {
+    mockFetchOnce({ answer: "Plain reply.", route: "agent", citations: [] });
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
+    fireEvent.change(screen.getByTestId("chat-input-textarea"), {
+      target: { value: "x" },
+    });
+    fireEvent.keyDown(screen.getByTestId("chat-input-textarea"), { key: "Enter" });
+    await screen.findByText("Plain reply.");
+    expect(screen.queryByTestId("citation-chips")).not.toBeInTheDocument();
+  });
+});
+
+// =====================================================
+// US1 — Char counter + 2000-char cap (T043)
+// =====================================================
+
+describe("US1: char counter + 2000-char cap", () => {
+  it("hides the counter well below the cap", () => {
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
+    const input = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "short" } });
+    expect(screen.queryByTestId("chat-input-counter")).not.toBeInTheDocument();
+  });
+
+  it("shows the counter when approaching the cap", () => {
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
+    const input = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "x".repeat(1900) } });
+    expect(screen.getByTestId("chat-input-counter").textContent).toBe(
+      "1900 / 2000"
+    );
+  });
+
+  it("rejects send when over the 2000-char cap", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
+    const input = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "x".repeat(2001) } });
+    expect(screen.getByTestId("chat-input-send")).toBeDisabled();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// =====================================================
+// US1 — Same-mount history preserved across CLOSE/OPEN; RESET clears (T044)
+// =====================================================
+
+describe("US1: history persists across CLOSE/OPEN within the same mount", () => {
+  it("dispatching CLOSE then OPEN preserves messages; RESET clears them", async () => {
+    mockFetchOnce({ answer: "first reply", route: "agent" });
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
+    fireEvent.change(screen.getByTestId("chat-input-textarea"), {
+      target: { value: "first send" },
+    });
+    fireEvent.keyDown(screen.getByTestId("chat-input-textarea"), { key: "Enter" });
+    await screen.findByText("first reply");
+
+    // CLOSE then OPEN (pagehide and visibilitychange→hidden RESET in
+    // ChatWidget; bare visibilitychange→visible does not). Simulate the
+    // visitor minimising the panel and re-opening without leaving the page.
+    fireEvent(
+      document,
+      new Event("visibilitychange") // jsdom defaults to "visible"
+    );
+
+    // Messages still present.
+    expect(screen.getByText("first send")).toBeInTheDocument();
+    expect(screen.getByText("first reply")).toBeInTheDocument();
+
+    // Now simulate page hide → RESET fires.
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    fireEvent(document, new Event("visibilitychange"));
+
+    await waitFor(() => {
+      expect(screen.queryByText("first send")).not.toBeInTheDocument();
+      expect(screen.queryByText("first reply")).not.toBeInTheDocument();
+    });
+
+    // Restore default for downstream tests.
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+  });
+});
+
 describe("US3: unmount + remount starts fresh (FR-019 at component level)", () => {
   it("a remounted ChatPane has an empty messages array", async () => {
     mockFetchOnce({ answer: "first reply", route: "agent" });
-    const { unmount } = render(<ChatPane backendUrl={BACKEND} />);
+    const { unmount } = render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
     fireEvent.change(screen.getByTestId("chat-input-textarea"), {
       target: { value: "first send" },
     });
@@ -430,7 +566,7 @@ describe("US3: unmount + remount starts fresh (FR-019 at component level)", () =
 
     // Remount.
     mockFetchOnce({ answer: "second reply", route: "agent" });
-    render(<ChatPane backendUrl={BACKEND} />);
+    render(<ChatPane backendUrl={BACKEND} initiallyOpen={true} />);
 
     // The new pane has zero messages.
     expect(screen.queryByText("first send")).not.toBeInTheDocument();

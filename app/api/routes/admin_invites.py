@@ -29,12 +29,18 @@ from app.domain.admin_invite import (
 from app.repositories.admin_invite_repo import AdminInviteRepository
 from app.repositories.admin_user_repo import AdminUserRepository
 from app.repositories.tenant_repo import TenantRepository
+from app.repositories.tenant_repo import TenantRepository as _TenantRepoForAudit
 from app.services.admin_invite import (
+    InviteActor,
+    InviteConflict,
+    InviteForbidden,
     InviteUnavailable,
     WeakPassword,
     accept_invite,
     create_invite,
     get_invite_details,
+    resend_invite,
+    revoke_invite,
 )
 
 router = APIRouter(prefix="/admin/invites", tags=["admin-invites"])
@@ -43,6 +49,7 @@ _HEADERS = {"Cache-Control": "no-store", "Content-Type": "application/json"}
 _FORBIDDEN_BODY = b'{"error":"forbidden"}'
 _BAD_REQUEST_BODY = b'{"error":"bad_request"}'
 _INVITE_UNAVAILABLE_BODY = b'{"error":"invite_unavailable"}'
+_CONFLICT_BODY = b'{"error":"invite_conflict"}'
 
 
 def _bytes_response(status: int, body: bytes) -> Response:
@@ -153,5 +160,88 @@ async def accept(
             "email": user.email,
             "tenant_id": str(user.tenant_id),
             "role": user.role,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Revoke — gated; tenant admin (own tenant) OR tenant manager (any tenant)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{token}/revoke")
+async def revoke(
+    token: UUID,
+    admin: TenantAdminContext | None = Depends(require_admin_session),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    if admin is None:
+        return _bytes_response(403, _FORBIDDEN_BODY)
+    actor = InviteActor(
+        tenant_id=admin.tenant_id,
+        actor_id=admin.actor_id or "unknown",
+        role=admin.role,
+    )
+    try:
+        revoked = await revoke_invite(
+            token=token,
+            actor=actor,
+            invite_repo=AdminInviteRepository(session),
+            tenant_repo=_TenantRepoForAudit(session),
+        )
+    except InviteUnavailable:
+        return _bytes_response(404, _INVITE_UNAVAILABLE_BODY)
+    except InviteForbidden:
+        return _bytes_response(403, _FORBIDDEN_BODY)
+    except InviteConflict:
+        return _bytes_response(409, _CONFLICT_BODY)
+    return _json_response(
+        200,
+        {
+            "ok": True,
+            "revoked_at": revoked.revoked_at.isoformat() if revoked.revoked_at else None,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Resend — gated; same scope rules as revoke
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{token}/resend")
+async def resend(
+    token: UUID,
+    admin: TenantAdminContext | None = Depends(require_admin_session),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    if admin is None:
+        return _bytes_response(403, _FORBIDDEN_BODY)
+    actor = InviteActor(
+        tenant_id=admin.tenant_id,
+        actor_id=admin.actor_id or "unknown",
+        role=admin.role,
+    )
+    try:
+        resent = await resend_invite(
+            token=token,
+            actor=actor,
+            invite_repo=AdminInviteRepository(session),
+            tenant_repo=_TenantRepoForAudit(session),
+        )
+    except InviteUnavailable:
+        return _bytes_response(404, _INVITE_UNAVAILABLE_BODY)
+    except InviteForbidden:
+        return _bytes_response(403, _FORBIDDEN_BODY)
+    except InviteConflict:
+        return _bytes_response(409, _CONFLICT_BODY)
+    return _json_response(
+        200,
+        {
+            "token": str(resent.token),
+            "email": resent.email,
+            "role": resent.role,
+            "tenant_id": str(resent.tenant_id),
+            "expires_at": resent.expires_at.isoformat(),
         },
     )

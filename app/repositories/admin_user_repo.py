@@ -48,3 +48,28 @@ class AdminUserRepository:
         self._session.add(user)
         await self._session.flush()
         return user
+
+    async def get_by_id(self, user_id: UUID) -> AdminUser | None:
+        """Lookup one admin user by id. Used by the escalations assignee check."""
+        result = await self._session.execute(
+            select(AdminUser).where(AdminUser.id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_by_tenant(self, tenant_id: UUID) -> list[AdminUser]:
+        """List active tenant_admin/tenant_manager users for one tenant.
+
+        Used by the escalations assignee dropdown — only active users are
+        eligible to be assigned. Cross-tenant scoping is enforced at the
+        route layer.
+        """
+        result = await self._session.execute(
+            select(AdminUser)
+            .where(
+                AdminUser.tenant_id == tenant_id,
+                AdminUser.status == "active",
+                AdminUser.role.in_(("tenant_admin", "tenant_manager")),
+            )
+            .order_by(AdminUser.email)
+        )
+        return list(result.scalars().all())

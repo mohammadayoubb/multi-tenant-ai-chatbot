@@ -14,19 +14,35 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import TenantAdminContext, require_admin_session
+from app.api.deps import TenantAdminContext, require_admin_session, require_tenant_admin
 from app.db.session import get_session
 from app.repositories.cms_repo import CmsRepository
+from app.repositories.tenant_repo import TenantRepository
+from app.services.cms_pages import (
+    CmsActor,
+    CmsPageInvalid,
+    CmsPageNotFound,
+    CmsPageService,
+)
 
 router = APIRouter(prefix="/cms", tags=["cms"])
 
 
 def _require_admin(admin: TenantAdminContext | None) -> TenantAdminContext:
     if admin is None:
+        raise HTTPException(status_code=403, detail="forbidden")
+    return admin
+
+
+def _refuse_tenant_manager(admin: TenantAdminContext) -> TenantAdminContext:
+    """FR-046: tenant_manager must not see tenant CMS content."""
+    if admin.role == "tenant_manager":
         raise HTTPException(status_code=403, detail="forbidden")
     return admin
 
@@ -75,7 +91,7 @@ async def list_pages(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[CmsPageResponse]:
     """List CMS pages for the caller's tenant only."""
-    ctx = _require_admin(admin)
+    ctx = _refuse_tenant_manager(_require_admin(admin))
     repo = CmsRepository(session)
     rows = await repo.list_pages(ctx.tenant_id)
     return [CmsPageResponse.from_row(r) for r in rows]
@@ -88,7 +104,7 @@ async def create_page(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CmsPageResponse:
     """Create one CMS page in the caller's tenant (tenant_id from JWT)."""
-    ctx = _require_admin(admin)
+    ctx = _refuse_tenant_manager(_require_admin(admin))
     repo = CmsRepository(session)
     page = await repo.create(
         tenant_id=ctx.tenant_id,
@@ -100,3 +116,74 @@ async def create_page(
         created_by=ctx.actor_id,
     )
     return CmsPageResponse.from_row(page)
+
+
+def _service(session: AsyncSession) -> CmsPageService:
+    return CmsPageService(CmsRepository(session), TenantRepository(session))
+
+
+def _actor(admin: TenantAdminContext) -> CmsActor:
+    return CmsActor(
+        tenant_id=admin.tenant_id,
+        actor_id=admin.actor_id or "unknown",
+        role=admin.role,
+    )
+
+
+@router.put("/pages/{page_id}")
+async def update_page(
+    page_id: UUID,
+    request: Request,
+    admin: Annotated[TenantAdminContext | None, Depends(require_tenant_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Edit a CMS page. tenant_id NEVER read from the body."""
+    ctx = _require_admin(admin)
+    try:
+        body = await request.json()
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="bad_request") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="bad_request")
+    try:
+        return await _service(session).update(page_id, body, _actor(ctx))
+    except CmsPageNotFound as exc:
+        raise HTTPException(status_code=403, detail="forbidden") from exc
+    except CmsPageInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("/pages/{page_id}/status")
+async def patch_page_status(
+    page_id: UUID,
+    request: Request,
+    admin: Annotated[TenantAdminContext | None, Depends(require_tenant_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    ctx = _require_admin(admin)
+    try:
+        body = await request.json()
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="bad_request") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="bad_request")
+    try:
+        return await _service(session).set_status(page_id, body, _actor(ctx))
+    except CmsPageNotFound as exc:
+        raise HTTPException(status_code=403, detail="forbidden") from exc
+    except CmsPageInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_page(
+    page_id: UUID,
+    admin: Annotated[TenantAdminContext | None, Depends(require_tenant_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    ctx = _require_admin(admin)
+    try:
+        await _service(session).delete(page_id, _actor(ctx))
+    except CmsPageNotFound as exc:
+        raise HTTPException(status_code=403, detail="forbidden") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
