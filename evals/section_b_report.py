@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
 # ruff: noqa: E402
 from app.agent.agent import _plan_tools
 from app.agent.router import _fallback_rule_decision
-from app.rag.retriever import RagChunk, _score_chunk, _tokenize, chunk_text
+from app.rag.retriever import RagChunk, _expanded_query_terms, _score_chunk, chunk_text
 
 
 AGENT_CASES_PATH = ROOT / "evals" / "agent_tool_selection_cases.json"
@@ -114,8 +114,7 @@ def _retrieve_from_case(case: dict[str, Any]) -> list[RagChunk]:
     """Run deterministic retrieval over inline case pages."""
 
     query = str(case["query"])
-    query_terms = _tokenize(query)
-    query_terms.update(_semantic_query_expansions(query))
+    query_terms = _expanded_query_terms(query)
     tenant_id = int(case["tenant_id"])
 
     candidates: list[RagChunk] = []
@@ -146,27 +145,6 @@ def _retrieve_from_case(case: dict[str, Any]) -> list[RagChunk]:
             )
 
     return sorted(candidates, key=lambda item: item.score, reverse=True)
-
-
-def _semantic_query_expansions(query: str) -> set[str]:
-    """Small deterministic synonyms for the current lexical RAG fallback."""
-
-    lowered = query.lower()
-    expansions: set[str] = set()
-
-    if "membership" in lowered or "cost" in lowered or "price" in lowered:
-        expansions.update({"membership", "memberships", "month", "dollars", "pricing"})
-
-    if "open" in lowered or "saturday" in lowered or "hours" in lowered:
-        expansions.update({"open", "saturday", "hours"})
-
-    if "located" in lowered or "where" in lowered or "location" in lowered:
-        expansions.update({"located", "location", "station", "library"})
-
-    if "cancellation" in lowered or "cancel" in lowered:
-        expansions.update({"cancellation", "policy", "hours"})
-
-    return expansions
 
 
 def _load_json(path: Path) -> list[dict[str, Any]]:

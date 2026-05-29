@@ -105,21 +105,19 @@ async def create_page(
 ) -> CmsPageResponse:
     """Create one CMS page in the caller's tenant (tenant_id from JWT)."""
     ctx = _refuse_tenant_manager(_require_admin(admin))
-    repo = CmsRepository(session)
-    page = await repo.create(
-        tenant_id=ctx.tenant_id,
+    payload = await _service(session).create(
         title=request.title,
         slug=request.slug,
         body=request.body,
         source_url=request.source_url,
         status=request.status,
-        created_by=ctx.actor_id,
+        actor=_actor(ctx),
     )
-    return CmsPageResponse.from_row(page)
+    return CmsPageResponse.model_validate(payload)
 
 
 def _service(session: AsyncSession) -> CmsPageService:
-    return CmsPageService(CmsRepository(session), TenantRepository(session))
+    return CmsPageService(CmsRepository(session), TenantRepository(session), session)
 
 
 def _actor(admin: TenantAdminContext) -> CmsActor:

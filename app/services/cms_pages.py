@@ -1,9 +1,8 @@
 # Owner: Nasser
-"""CMS page edit / publish / unpublish / delete service.
+"""CMS page create / edit / publish / unpublish / delete service.
 
-Layered on top of the existing CmsRepository.create flow. Each successful
-mutation emits an audit-log row via TenantRepository.add_audit_log and
-re-triggers RAG ingest on status flips so the vector store stays in sync.
+Each successful mutation keeps the tenant RAG index in sync. Edit / status /
+delete operations also emit audit rows via TenantRepository.add_audit_log.
 
 Audit events:
 - cms.page_updated
@@ -25,6 +24,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.cms_repo import CmsRepository
 from app.repositories.tenant_repo import TenantRepository
@@ -69,9 +69,33 @@ class CmsPageService:
         self,
         repo: CmsRepository,
         tenant_repo: TenantRepository,
+        session: AsyncSession | None = None,
     ) -> None:
         self._repo = repo
         self._tenant_repo = tenant_repo
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        title: str,
+        slug: str,
+        body: str,
+        source_url: str | None,
+        status: str,
+        actor: CmsActor,
+    ) -> dict[str, Any]:
+        page = await self._repo.create(
+            tenant_id=actor.tenant_id,
+            title=title,
+            slug=slug,
+            body=body,
+            source_url=source_url,
+            status=status,
+            created_by=actor.actor_id,
+        )
+        await self._sync_page_index(page)
+        return _to_payload(page)
 
     async def update(
         self,
@@ -94,8 +118,7 @@ class CmsPageService:
             action="cms.page_updated",
             metadata={"page_id": str(page_id), "fields": sorted(diff.keys())},
         )
-        if "status" in diff:
-            await self._reindex_after_status_change(page.tenant_id, page_id, diff["status"])
+        await self._sync_page_index(page)
         return _to_payload(page)
 
     async def set_status(
@@ -123,9 +146,7 @@ class CmsPageService:
             action=action,
             metadata={"page_id": str(page_id), "status": validated.status},
         )
-        await self._reindex_after_status_change(
-            page.tenant_id, page_id, validated.status
-        )
+        await self._sync_page_index(page)
         return _to_payload(page)
 
     async def delete(
@@ -144,27 +165,37 @@ class CmsPageService:
             action="cms.page_deleted",
             metadata={"page_id": str(page_id)},
         )
-        await self._reindex_after_status_change(page.tenant_id, page_id, "archived")
+        await self._delete_page_index(page.tenant_id, page_id)
 
-    async def _reindex_after_status_change(
-        self, tenant_id: UUID, page_id: UUID, new_status: str
-    ) -> None:
-        """Best-effort RAG re-index hook.
+    async def _sync_page_index(self, page: Any) -> None:
+        """Write the page's current state to the RAG index."""
 
-        The ingest pipeline lives in `app/rag/ingest.py`. The pipeline today
-        accepts a tenant_id + page_id + text; here we only invoke it with the
-        published body. Failure does not roll back the status change — the
-        admin UI can re-run the action and the audit-log entry survives.
-        """
-        try:
-            from app.rag.ingest import embed_cms_page  # noqa: F401 — import side-effect
-        except Exception:  # pragma: no cover — ingest pipeline optional
+        if self._session is None:
             return
-        # The current `embed_cms_page` signature expects ints; until the
-        # pipeline is migrated to UUIDs this hook is intentionally a no-op so
-        # we never crash the route. A future migration will replace this stub
-        # with the real ingest call. (Tracked in DECISIONS.md.)
-        return
+
+        from app.rag.ingest import sync_cms_page_index
+
+        await sync_cms_page_index(
+            self._session,
+            tenant_id=page.tenant_id,
+            page_id=page.id,
+            text=page.body,
+            source_title=page.title,
+            source_url=page.source_url,
+            status=page.status,
+        )
+
+    async def _delete_page_index(self, tenant_id: UUID, page_id: UUID) -> None:
+        if self._session is None:
+            return
+
+        from app.rag.ingest import delete_cms_page_chunks
+
+        await delete_cms_page_chunks(
+            self._session,
+            tenant_id=tenant_id,
+            page_id=page_id,
+        )
 
 
 def _to_payload(page) -> dict[str, Any]:  # noqa: ANN001 — ORM row
@@ -175,5 +206,5 @@ def _to_payload(page) -> dict[str, Any]:  # noqa: ANN001 — ORM row
         "body": page.body,
         "source_url": page.source_url,
         "status": page.status,
-        "updated_at": page.updated_at.isoformat() if page.updated_at else None,
+        "updated_at": page.updated_at.isoformat() if page.updated_at else "",
     }

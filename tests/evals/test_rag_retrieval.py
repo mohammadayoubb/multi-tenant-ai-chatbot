@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from app.rag.retriever import RagChunk, _score_chunk, _tokenize, chunk_text
+from app.rag.retriever import RagChunk, _expanded_query_terms, _score_chunk, chunk_text
 
 CASES_PATH = Path("evals/rag_cases.json")
 
@@ -29,8 +29,7 @@ def _load_cases() -> list[dict[str, Any]]:
 
 def _retrieve_from_case(case: dict[str, Any]) -> list[RagChunk]:
     query = str(case["query"])
-    query_terms = _tokenize(query)
-    query_terms.update(_semantic_query_expansions(query))
+    query_terms = _expanded_query_terms(query)
     tenant_id = int(case["tenant_id"])
 
     candidates: list[RagChunk] = []
@@ -80,24 +79,3 @@ def test_rag_retrieval_golden_set(case: dict[str, Any]) -> None:
     lowered_text = best.text.lower()
     for term in case["expected_terms"]:
         assert str(term).lower() in lowered_text, case["reason"]
-
-
-def _semantic_query_expansions(query: str) -> set[str]:
-    """Small deterministic synonyms for the RAG golden-set eval."""
-
-    lowered = query.lower()
-    expansions: set[str] = set()
-
-    if "membership" in lowered or "cost" in lowered or "price" in lowered:
-        expansions.update({"membership", "memberships", "month", "dollars", "pricing"})
-
-    if "open" in lowered or "saturday" in lowered or "hours" in lowered:
-        expansions.update({"open", "saturday", "hours"})
-
-    if "located" in lowered or "where" in lowered or "location" in lowered:
-        expansions.update({"located", "location", "station", "library"})
-
-    if "cancellation" in lowered or "cancel" in lowered:
-        expansions.update({"cancellation", "policy", "hours"})
-
-    return expansions

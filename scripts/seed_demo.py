@@ -38,6 +38,7 @@ from app.db.models import (
 )
 from app.db.session import get_sessionmaker
 from app.infra.password import hash_password
+from app.rag.ingest import sync_cms_page_index
 from app.repositories.admin_user_repo import AdminUserRepository
 from scripts.seed_tenants import seed_demo_tenants_with_session
 
@@ -253,10 +254,9 @@ async def _seed_cms_pages(
                 CmsPage.tenant_id == tenant_id, CmsPage.slug == slug
             )
         )
-        if existing.scalar_one_or_none() is not None:
-            continue
-        session.add(
-            CmsPage(
+        page = existing.scalar_one_or_none()
+        if page is None:
+            page = CmsPage(
                 id=uuid4(),
                 tenant_id=tenant_id,
                 title=title,
@@ -265,8 +265,19 @@ async def _seed_cms_pages(
                 status="published",
                 created_by="seed:demo",
             )
+            session.add(page)
+            await session.flush()
+            created += 1
+
+        await sync_cms_page_index(
+            session,
+            tenant_id=tenant_id,
+            page_id=page.id,
+            text=page.body,
+            source_title=page.title,
+            source_url=page.source_url,
+            status=page.status,
         )
-        created += 1
     return created
 
 

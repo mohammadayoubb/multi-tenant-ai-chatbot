@@ -173,6 +173,9 @@ jobs:
       - name: Check RAG hit@5 threshold
         run: python scripts/check_threshold.py --gate rag --metric hit_at_5_min --json rag-eval.json
 
+      - name: Check RAG MRR threshold
+        run: python scripts/check_threshold.py --gate rag --metric mrr_min --json rag-eval.json
+
       - name: Check RAG faithfulness threshold
         run: python scripts/check_threshold.py --gate rag --metric faithfulness_min --json rag-eval.json
 
